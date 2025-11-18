@@ -1,0 +1,25 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: docker build -t otobo:${{ github.sha }} .
+
+    - name: Test Docker image
+      run: |
+        docker run -d --name test-container -p 3000:3000 otobo:${{ github.sha }}
+        sleep 5
+        docker stop test-container
+        docker rm test-container

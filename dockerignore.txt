@@ -1,0 +1,7 @@
+.git
+.gitignore
+README.md
+.dockerignore
+**/.DS_Store
+**/node_modules
+**/*.log

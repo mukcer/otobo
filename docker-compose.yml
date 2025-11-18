@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - APP_ENV=development
+    volumes:
+      - ./cmd/app:/app/cmd/app
+    restart: unless-stopped
+    container_name: otobo_app

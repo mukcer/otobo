@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    {{if eq .Page "products"}}
+    <link rel="stylesheet" href="/static/css/products.css">
+    {{end}}
+    {{if or (eq .Page "login") (eq .Page "register")}}
+    <link rel="stylesheet" href="/static/css/auth.css">
+    {{end}}
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <a href="/" class="logo">
+                    <i class="fas fa-sun"></i>
+                    ODOBO
+                </a>
+            </div>
+
+            <div class="navbar-menu">
+                <a href="/products" class="nav-link {{if eq .Page "products"}}active{{end}}">
+                    <i class="fas fa-shopping-bag"></i>
+                    Магазин
+                </a>
+                
+                {{if .User}}
+                <a href="/cart" class="nav-link cart-link {{if eq .Page "cart"}}active{{end}}">
+                    <i class="fas fa-shopping-cart"></i>
+                    Корзина
+                    <span class="cart-badge" id="cartBadge">{{.CartCount}}</span>
+                </a>
+                
+                <div class="user-menu">
+                    <a href="/profile" class="nav-link {{if eq .Page "profile"}}active{{end}}">
+                        <i class="fas fa-user"></i>
+                        {{.User.FirstName}}
+                    </a>
+                    <button onclick="logout()" class="nav-link logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Выйти
+                    </button>
+                </div>
+                {{else}}
+                <div class="auth-links">
+                    <a href="/login" class="nav-link {{if eq .Page "login"}}active{{end}}">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Войти
+                    </a>
+                    <a href="/register" class="nav-link register-btn {{if eq .Page "register"}}active{{end}}">
+                        Регистрация
+                    </a>
+                </div>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {{embed}}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 ODOBO Store. Все права защищены.</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/main.js"></script>
+    
+    {{if eq .Page "products"}}
+    <script src="/static/js/products.js"></script>
+    {{end}}
+    {{if or (eq .Page "login") (eq .Page "register")}}
+    <script src="/static/js/auth.js"></script>
+    {{end}}
+</body>
+</html>

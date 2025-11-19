@@ -1,45 +1,29 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Магазин - Fashion Store</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/products.css">
-</head>
-<body>
-    <!-- Navbar -->
-    <nav class="navbar" id="navbar">
-        <div class="container">
-            <div class="navbar-brand">
-                <a href="/" class="logo">
-                    <i class="fas fa-crown"></i>
-                    FashionStore
-                </a>
-            </div>
-
-            <div class="navbar-menu" id="navbarMenu">
-                <!-- Меню будет заполняться через JavaScript -->
-            </div>
-
-            <button class="navbar-toggle" id="navbarToggle">
-                <i class="fas fa-bars"></i>
-            </button>
+{{define "products"}}
+<div class="container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1>Магазин одежды</h1>
+        <p>Откройте для себя последние коллекции модной женской одежды</p>
+        
+        {{if .Category}}
+        <div class="current-filter">
+            Категория: <strong>{{.Category}}</strong>
+            <a href="/products" class="clear-filter">
+                <i class="fas fa-times"></i>
+            </a>
         </div>
-    </nav>
+        {{end}}
+    </div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <div class="container">
-            <!-- Page Header -->
-            <div class="page-header">
-                <h1>Магазин одежды</h1>
-                <p>Откройте для себя последние коллекции модной женской одежды</p>
-            </div>
+    <!-- Server-Side Rendered Initial Data -->
+    <script id="initialData" type="application/json">
+        {
+            "category": "{{.Category}}",
+            "currentPage": {{.CurrentPage}}
+        }
+    </script>
 
-            <!-- Filters and Products Grid -->
+             <!-- Filters and Products Grid -->
             <div class="products-layout">
                 <!-- Sidebar Filters -->
                 <aside class="filters-sidebar" id="filtersSidebar">
@@ -183,15 +167,4 @@
         Фильтры
     </button>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2024 Fashion Store. Все права защищены.</p>
-        </div>
-    </footer>
-
-    <script src="js/api.js"></script>
-    <script src="js/main.js"></script>
-    <script src="js/products.js"></script>
-</body>
-</html>
+{{end}}

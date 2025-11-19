@@ -1,0 +1,264 @@
+{{define "admin_products"}}
+<div class="container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1>Управление товарами</h1>
+        <p>Добавление и редактирование товаров магазина</p>
+    </div>
+
+    <!-- Admin Actions -->
+    <div class="admin-actions">
+        <button class="btn btn-primary" onclick="adminProducts.openCreateModal()">
+            <i class="fas fa-plus"></i>
+            Добавить товар
+        </button>
+        
+        <div class="admin-stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalProducts">0</div>
+                <div class="stat-label">Всего товаров</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="activeProducts">0</div>
+                <div class="stat-label">Активных</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="outOfStock">0</div>
+                <div class="stat-label">Нет в наличии</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="admin-table-container">
+        <div class="table-header">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchProducts" placeholder="Поиск товаров..." onkeyup="adminProducts.searchProducts(event)">
+            </div>
+            
+            <div class="table-actions">
+                <select id="categoryFilter" onchange="adminProducts.applyFilters()">
+                    <option value="">Все категории</option>
+                </select>
+                
+                <select id="statusFilter" onchange="adminProducts.applyFilters()">
+                    <option value="">Все статусы</option>
+                    <option value="active">Активные</option>
+                    <option value="inactive">Неактивные</option>
+                    <option value="out_of_stock">Нет в наличии</option>
+                </select>
+            </div>
+        </div>
+
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Изображение</th>
+                    <th>Название</th>
+                    <th>Категория</th>
+                    <th>Цена</th>
+                    <th>Статус</th>
+                    <th>Остаток</th>
+                    <th>Дата</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="productsTableBody">
+                <tr>
+                    <td colspan="9" class="loading-row">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Загрузка товаров...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination">
+            <!-- Will be filled by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Product Modal -->
+<div class="modal large-modal" id="productFormModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Добавить товар</h2>
+            <span class="close-modal" onclick="adminProducts.closeModal()">&times;</span>
+        </div>
+        
+        <div class="modal-body">
+            <form id="productForm" class="product-form">
+                <!-- Basic Information -->
+                <div class="form-section">
+                    <h3>Основная информация</h3>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="productName">Название товара *</label>
+                            <input type="text" id="productName" name="name" required>
+                            <span class="error-message" id="nameError"></span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="productSlug">URL-адрес (slug) *</label>
+                            <input type="text" id="productSlug" name="slug" required>
+                            <span class="error-message" id="slugError"></span>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="productCategory">Категория *</label>
+                            <select id="productCategory" name="category_id" required>
+                                <option value="">Выберите категорию</option>
+                            </select>
+                            <span class="error-message" id="categoryError"></span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="productSKU">Артикул (SKU) *</label>
+                            <input type="text" id="productSKU" name="sku" required>
+                            <span class="error-message" id="skuError"></span>
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="productDescription">Описание</label>
+                        <textarea id="productDescription" name="description" rows="4"></textarea>
+                    </div>
+                </div>
+
+                <!-- Pricing -->
+                <div class="form-section">
+                    <h3>Цены</h3>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="productPrice">Цена *</label>
+                            <input type="number" id="productPrice" name="price" step="0.01" min="0" required>
+                            <span class="error-message" id="priceError"></span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="productComparePrice">Старая цена</label>
+                            <input type="number" id="productComparePrice" name="compare_price" step="0.01" min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Inventory -->
+                <div class="form-section">
+                    <h3>Наличие и статус</h3>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="productInStock" name="in_stock" checked>
+                                <span class="checkmark"></span>
+                                В наличии
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="productIsActive" name="is_active" checked>
+                                <span class="checkmark"></span>
+                                Активный товар
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Images -->
+                <div class="form-section">
+                    <h3>Изображения</h3>
+                    
+                    <div class="image-upload-area" id="imageUploadArea">
+                        <div class="upload-placeholder" onclick="document.getElementById('imageUpload').click()">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Перетащите изображения сюда или нажмите для выбора</p>
+                            <span>Рекомендуемый размер: 800x1000px</span>
+                        </div>
+                        <input type="file" id="imageUpload" multiple accept="image/*" style="display: none;" 
+                               onchange="adminProducts.handleImageUpload(event)">
+                    </div>
+                    
+                    <div class="image-preview" id="imagePreview">
+                        <!-- Image previews will be added here -->
+                    </div>
+                </div>
+
+                <!-- Features -->
+                <div class="form-section">
+                    <h3>Характеристики</h3>
+                    
+                    <div class="features-container" id="featuresContainer">
+                        <div class="feature-input">
+                            <input type="text" placeholder="Добавьте характеристику" id="newFeature">
+                            <button type="button" onclick="adminProducts.addFeature()">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="features-list" id="featuresList">
+                        <!-- Features will be added here -->
+                    </div>
+                </div>
+
+                <!-- Variations -->
+                <div class="form-section">
+                    <h3>Вариации</h3>
+                    
+                    <div class="variations-header">
+                        <button type="button" class="btn btn-secondary" onclick="adminProducts.addVariation()">
+                            <i class="fas fa-plus"></i>
+                            Добавить вариацию
+                        </button>
+                    </div>
+                    
+                    <div class="variations-list" id="variationsList">
+                        <!-- Variations will be added here -->
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="adminProducts.closeModal()">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-save"></i>
+                        Сохранить товар
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal" id="deleteModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Подтверждение удаления</h2>
+        </div>
+        <div class="modal-body">
+            <p>Вы уверены, что хотите удалить этот товар? Это действие нельзя отменить.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="adminProducts.closeDeleteModal()">
+                Отмена
+            </button>
+            <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                <i class="fas fa-trash"></i>
+                Удалить
+            </button>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -12,6 +12,17 @@ type ProductHandler struct {
 	productRepo  *repositories.ProductRepository
 	categoryRepo *repositories.CategoryRepository
 }
+type CategoryHandler struct {
+	categoryRepo *repositories.CategoryRepository
+}
+
+func NewCategoryHandler(
+	categoryRepo *repositories.CategoryRepository,
+) *CategoryHandler {
+	return &CategoryHandler{
+		categoryRepo: categoryRepo,
+	}
+}
 
 func NewProductHandler(
 	productRepo *repositories.ProductRepository,
@@ -81,7 +92,7 @@ func (h *ProductHandler) GetProduct(c *fiber.Ctx) error {
 	return c.JSON(product)
 }
 
-func (h *ProductHandler) GetCategories(c *fiber.Ctx) error {
+func (h *CategoryHandler) GetCategories(c *fiber.Ctx) error {
 	categories, err := h.categoryRepo.FindAll()
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{

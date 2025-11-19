@@ -1,0 +1,62 @@
+{{define "index"}}
+<!-- Hero Section -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-content">
+            <h1>Модная женская одежда</h1>
+            <p>Откройте для себя последние тенденции моды в нашем магазине</p>
+            <div class="hero-buttons">
+                <a href="/products" class="btn btn-primary">
+                    <i class="fas fa-shopping-bag"></i>
+                    В магазин
+                </a>
+                <a href="#features" class="btn btn-secondary">
+                    Узнать больше
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="features">
+    <div class="container">
+        <h2>Почему выбирают нас</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <i class="fas fa-shipping-fast"></i>
+                <h3>Быстрая доставка</h3>
+                <p>Доставка по всей России за 2-5 дней</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-undo-alt"></i>
+                <h3>Легкий возврат</h3>
+                <p>Возврат товара в течение 14 дней</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-shield-alt"></i>
+                <h3>Безопасная оплата</h3>
+                <p>Защищенные платежи онлайн</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-headset"></i>
+                <h3>Поддержка 24/7</h3>
+                <p>Всегда готовы помочь с выбором</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Featured Products -->
+<section class="featured-products">
+    <div class="container">
+        <h2>Популярные товары</h2>
+        <div class="products-grid" id="featuredProducts">
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Загрузка популярных товаров...</p>
+            </div>
+        </div>
+    </div>
+</section>
+{{end}}

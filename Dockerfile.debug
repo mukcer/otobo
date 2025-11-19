@@ -1,36 +1,44 @@
-# Билд стадии
+# Dockerfile.debug
 FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache \
+    git \
+    gcc \
+    g++ \
+    musl-dev
+
 WORKDIR /app
+
+# Копируем go.mod и загружаем зависимости
 COPY go.mod go.sum ./
 RUN go mod download
+
+# Копируем весь код
 COPY . .
 
-# Устанавливаем отладчик Delve
+# Устанавливаем Delve
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
-#RUN go build -o otobo ./cmd/app
-# Собираем приложение с флагами для отладки
-RUN CGO_ENABLED=0 go build -gcflags="all=-N -l" -o otobo ./cmd/app
+# Собираем бинарник с отладочной информацией
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -gcflags "all=-N -l" \
+    -o main ./cmd/app/main.go
 
+# Финальный образ (с Delve)
+FROM golang:1.25-alpine
 
+RUN apk add --no-cache \
+    ca-certificates \
+    gcc \
+    g++ \
+    musl-dev
+WORKDIR /root
 
+# Копируем бинарник и dlv
+COPY --from=builder /app/main .
+COPY --from=builder /go/bin/dlv /go/bin/dlv
 
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/otobo .
-COPY --from=builder /go/bin/dlv /
-#EXPOSE 3000
-EXPOSE 3000 40000
+EXPOSE 40000 3000
 
-# Запускаем приложение под управлением Delve
-CMD ["/dlv", "--listen=:40000", "--headless=true", "--log", "--accept-multiclient", "--api-version=2", "exec", "./otobo"]
-
-#RUN go build -o otobo ./cmd/app
-
-# Финальная стадия
-#FROM alpine:latest
-#RUN apk --no-cache add ca-certificates
-#WORKDIR /root/
-#COPY --from=builder /app/otobo .
-#EXPOSE 3000
-#CMD ["./otobo"]
+# Запускаем dlv, слушает на 40000
+CMD ["dlv", "exec", "./main", "--headless", "--listen=:40000", "--log", "--api-version=2", "--accept-multiclient"]

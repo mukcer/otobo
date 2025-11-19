@@ -1,15 +1,4 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход - OTOBO Store</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/auth.css">
-</head>
-<body>
+{{define "login"}}
     <div class="auth-container">
         <div class="auth-card">
             <div class="auth-header">
@@ -56,10 +45,10 @@
             <div class="auth-footer">
                 <p>
                     Еще нет аккаунта?
-                    <a href="register.html" class="auth-link">Зарегистрироваться</a>
+                    <a href="register" class="auth-link">Зарегистрироваться</a>
                 </p>
                 <p>
-                    <a href="index.html" class="auth-link">
+                    <a href="index" class="auth-link">
                         <i class="fas fa-arrow-left"></i>
                         Вернуться на главную
                     </a>
@@ -67,8 +56,4 @@
             </div>
         </div>
     </div>
-
-    <script src="js/api.js"></script>
-    <script src="js/auth.js"></script>
-</body>
-</html>
+{{end}}

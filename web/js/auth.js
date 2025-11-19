@@ -120,7 +120,7 @@ class AuthManager {
                     
                 } catch (loginError) {
                     // Redirect to login page if auto-login fails
-                    window.location.href = 'login.html';
+                    window.location.href = 'login';
                 }
             }, 2000);
             
@@ -259,8 +259,8 @@ class AuthManager {
     }
 
     checkAuthentication() {
-        if (api.isAuthenticated() && (window.location.pathname.includes('login.html') || window.location.pathname.includes('register.html'))) {
-            window.location.href = 'index.html';
+        if (api.isAuthenticated() && (window.location.pathname.includes('login') || window.location.pathname.includes('register'))) {
+            window.location.href = '/';
         }
     }
 }

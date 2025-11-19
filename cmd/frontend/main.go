@@ -2,21 +2,32 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/proxy"
+	"github.com/gofiber/template/html/v2"
 )
 
 func main() {
+	// Находим папку web
+	webDir := getWebDir()
+	log.Println("📁 Using web directory:", webDir)
+
+	// Инициализируем движок шаблонов
+	engine := html.New(filepath.Join(webDir, "views"), ".html")
+	engine.Reload(true) // Включить в dev
+
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: false,
+		Views:                 engine,
+		ViewsLayout:           "layouts/main", // относительно views/
 	})
 
 	// Middleware
@@ -28,69 +39,84 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Получаем путь к статическим файлам фронтенда
-	webDir := getWebDir()
+	// === ВАЖНО: Порядок роутов ===
 
-	// Статические файлы
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:   http.Dir(webDir),
-		Index:  "index.html",
-		MaxAge: 3600,
-	}))
-
-	// Прокси для API запросов к основному серверу
+	// 1. Прокси API → ДО статики
 	setupAPIProxy(app)
 
-	// Специальные маршруты для SPA (Single Page Application)
-	setupSPARoutes(app, webDir)
+	// 2. Статические файлы
+	// У вас: web/css, web/js, web/images
+	app.Static("/css", filepath.Join(webDir, "css"))
+	app.Static("/js", filepath.Join(webDir, "js"))
+	app.Static("/images", filepath.Join(webDir, "images"))
+	app.Static("/static", webDir) // резервный путь, если где-то /static/...
 
-	log.Println("🚀 Frontend server started on :3001")
-	log.Printf("📁 Serving static files from: %s", webDir)
-	log.Fatal(app.Listen(":3001"))
+	// 3. Страницы
+	setupPageRoutes(app)
+
+	// 4. Health check
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":    "healthy",
+			"service":   "frontend",
+			"timestamp": time.Now(),
+		})
+	})
+
+	// 5. SPA Fallback — последний
+	app.Use(func(c *fiber.Ctx) error {
+		path := c.Path()
+
+		// Пропускаем API, статику, .ico и т.п.
+		if strings.HasPrefix(path, "/api/") ||
+			strings.Contains(path, ".") ||
+			strings.HasPrefix(path, "/css/") ||
+			strings.HasPrefix(path, "/js/") ||
+			strings.HasPrefix(path, "/images/") {
+			return c.SendStatus(404)
+		}
+
+		return c.Render("index", fiber.Map{
+			"Title": "Fashion Store",
+			"Page":  "app",
+		})
+	})
+
+	// Запуск
+	port := getEnv("PORT", "3001")
+	log.Println("🚀 Frontend server started on http://localhost:" + port)
+	log.Fatal(app.Listen(":" + port))
 }
 
+// getWebDir — ищем папку web
 func getWebDir() string {
-	// Пытаемся найти папку web относительно текущей директории
+	currentDir, _ := os.Getwd()
+	log.Println("🔍 Current dir:", currentDir)
+
+	// Относительные пути от cmd/frontend
 	dirsToCheck := []string{
-		"./web",
-		"../web",
+		filepath.Join(currentDir, "..", "..", "web"), // ../../web
+		filepath.Join(currentDir, "..", "web"),       // ../web
+		filepath.Join(currentDir, "web"),             // ./web
 		"../../web",
-		"./cmd/frontend/web",
+		"../web",
+		"./web",
 	}
 
 	for _, dir := range dirsToCheck {
-		if _, err := os.Stat(dir); err == nil {
-			absPath, _ := filepath.Abs(dir)
-			return absPath
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			abs, _ := filepath.Abs(dir)
+			return abs
 		}
 	}
 
-	// Если папка не найдена, создаем базовую структуру
-	log.Println("⚠️  Web directory not found, creating basic structure...")
-	return createBasicWebStructure()
+	// Если не найдено — паника
+	log.Fatal("❌ Папка 'web' не найдена. Ожидается: ../../web")
+	return ""
 }
 
-func createBasicWebStructure() string {
-	baseDir := "./web"
-	os.MkdirAll(baseDir, 0755)
-
-	// Создаем базовые папки
-	dirs := []string{"css", "js", "images"}
-	for _, dir := range dirs {
-		os.MkdirAll(filepath.Join(baseDir, dir), 0755)
-	}
-
-	// Создаем базовый index.html
-	createBasicIndexHTML(baseDir)
-	createBasicCSS(baseDir)
-	createBasicJS(baseDir)
-
-	absPath, _ := filepath.Abs(baseDir)
-	return absPath
-}
-
+// setupAPIProxy — проксируем API на бэкенд (:3000)
 func setupAPIProxy(app *fiber.App) {
-	// Прокси для API endpoints
 	apiRoutes := []string{
 		"/api/v1/auth/*",
 		"/api/v1/products/*",
@@ -102,327 +128,88 @@ func setupAPIProxy(app *fiber.App) {
 
 	for _, route := range apiRoutes {
 		app.All(route, func(c *fiber.Ctx) error {
-			// Основной сервер на порту 3000
-			targetURL := "http://localhost:3000" + c.Path()
+			// Получаем путь после префикса
+			path := c.Params("*")
+			targetURL := "http://localhost:3000/api/v1/" + path
 
+			// Выполняем прокси
 			if err := proxy.Do(c, targetURL); err != nil {
 				return c.Status(500).JSON(fiber.Map{
-					"error": "API server unavailable",
+					"error": "API server is unreachable",
 				})
 			}
 
-			// Remove Server header from response
+			// Убираем заголовок Server
 			c.Response().Header.Del(fiber.HeaderServer)
 			return nil
 		})
 	}
+}
 
-	// Health check endpoint
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status":    "healthy",
-			"service":   "frontend",
-			"timestamp": time.Now(),
+// setupPageRoutes — страницы
+func setupPageRoutes(app *fiber.App) {
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Render("index", fiber.Map{
+			"Title": "Fashion Store - Магазин модной женской одежды",
+			"Page":  "home",
+		})
+	})
+
+	app.Get("/products", func(c *fiber.Ctx) error {
+		category := c.Query("category")
+		page, _ := strconv.Atoi(c.Query("page", "1"))
+		if page < 1 {
+			page = 1
+		}
+
+		return c.Render("products", fiber.Map{
+			"Title":       "Каталог - Fashion Store",
+			"Page":        "products",
+			"Category":    category,
+			"CurrentPage": page,
+		})
+	})
+
+	app.Get("/login", func(c *fiber.Ctx) error {
+		return c.Render("login", fiber.Map{
+			"Title": "Вход - Fashion Store",
+			"Page":  "login",
+		})
+	})
+
+	app.Get("/register", func(c *fiber.Ctx) error {
+		return c.Render("register", fiber.Map{
+			"Title": "Регистрация - Fashion Store",
+			"Page":  "register",
+		})
+	})
+
+	app.Get("/profile", func(c *fiber.Ctx) error {
+		return c.Render("profile", fiber.Map{
+			"Title": "Профиль - Fashion Store",
+			"Page":  "profile",
+		})
+	})
+
+	app.Get("/admin/products", func(c *fiber.Ctx) error {
+		return c.Render("admin_products", fiber.Map{
+			"Title": "Управление товарами",
+			"Page":  "admin_products",
+		})
+	})
+
+	app.Get("/cart", func(c *fiber.Ctx) error {
+		return c.Render("cart", fiber.Map{
+			"Title": "Корзина - Fashion Store",
+			"Page":  "cart",
 		})
 	})
 }
 
-func setupSPARoutes(app *fiber.App, webDir string) {
-	// Маршруты для SPA - все неизвестные пути возвращают index.html
-	spaRoutes := []string{
-		"/login",
-		"/register",
-		"/profile",
-		"/products",
-		"/cart",
-		"/admin",
+// getEnv — получить переменную окружения
+func getEnv(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
 	}
-
-	for _, route := range spaRoutes {
-		app.Get(route, func(c *fiber.Ctx) error {
-			return c.SendFile(filepath.Join(webDir, "index.html"))
-		})
-	}
-}
-
-func createBasicIndexHTML(baseDir string) {
-	htmlContent := `<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fashion Store - Магазин модной женской одежды</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-    <nav class="navbar">
-        <div class="container">
-            <div class="navbar-brand">
-                <a href="/" class="logo">
-                    <i class="fas fa-crown"></i>
-                    FashionStore
-                </a>
-            </div>
-            <div class="navbar-menu">
-                <a href="/products" class="nav-link">
-                    <i class="fas fa-shopping-bag"></i>
-                    Магазин
-                </a>
-                <div class="auth-links">
-                    <a href="/login" class="nav-link">
-                        <i class="fas fa-sign-in-alt"></i>
-                        Войти
-                    </a>
-                    <a href="/register" class="nav-link register-btn">
-                        Регистрация
-                    </a>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="main-content">
-        <section class="hero">
-            <div class="container">
-                <div class="hero-content">
-                    <h1>Добро пожаловать в Fashion Store</h1>
-                    <p>Сервер фронтенда запущен успешно! Файлы будут обслуживаться из папки web/</p>
-                    <div class="hero-buttons">
-                        <a href="/products" class="btn btn-primary">
-                            <i class="fas fa-shopping-bag"></i>
-                            Перейти в магазин
-                        </a>
-                        <a href="/login" class="btn btn-secondary">
-                            <i class="fas fa-sign-in-alt"></i>
-                            Войти в систему
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2024 Fashion Store. Frontend served by Go server.</p>
-        </div>
-    </footer>
-
-    <script src="/js/main.js"></script>
-</body>
-</html>`
-
-	os.WriteFile(filepath.Join(baseDir, "index.html"), []byte(htmlContent), 0644)
-}
-
-func createBasicCSS(baseDir string) {
-	cssContent := `* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Inter', sans-serif;
-    line-height: 1.6;
-    color: #333;
-    background-color: #f8f9fa;
-}
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 1rem;
-}
-
-/* Navbar */
-.navbar {
-    background: white;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    padding: 1rem 0;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-}
-
-.navbar .container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.logo {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #e91e63;
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.navbar-menu {
-    display: flex;
-    align-items: center;
-    gap: 2rem;
-}
-
-.nav-link {
-    color: #333;
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-
-.nav-link:hover {
-    background: #f8f9fa;
-    color: #e91e63;
-}
-
-.register-btn {
-    background: #e91e63;
-    color: white !important;
-}
-
-.register-btn:hover {
-    background: #d81b60;
-}
-
-/* Hero Section */
-.hero {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 8rem 0 4rem;
-    text-align: center;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-}
-
-.hero-content h1 {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    font-weight: 700;
-}
-
-.hero-content p {
-    font-size: 1.2rem;
-    margin-bottom: 2rem;
-    opacity: 0.9;
-}
-
-.hero-buttons {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
-.btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 2rem;
-    text-decoration: none;
-    border-radius: 8px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.btn-primary {
-    background: #e91e63;
-    color: white;
-}
-
-.btn-primary:hover {
-    background: #d81b60;
-    transform: translateY(-2px);
-}
-
-.btn-secondary {
-    background: transparent;
-    color: white;
-    border: 2px solid white;
-}
-
-.btn-secondary:hover {
-    background: white;
-    color: #333;
-}
-
-/* Footer */
-.footer {
-    background: #333;
-    color: white;
-    text-align: center;
-    padding: 2rem 0;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .hero-content h1 {
-        font-size: 2rem;
-    }
-    
-    .hero-buttons {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .btn {
-        width: 200px;
-        justify-content: center;
-    }
-}`
-
-	os.WriteFile(filepath.Join(baseDir, "css", "style.css"), []byte(cssContent), 0644)
-}
-
-func createBasicJS(baseDir string) {
-	jsContent := `console.log('Fashion Store frontend loaded successfully');
-
-// Basic navigation
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM fully loaded and parsed');
-    
-    // Add loading states to buttons
-    const buttons = document.querySelectorAll('.btn, .nav-link');
-    buttons.forEach(button => {
-        button.addEventListener('click', function(e) {
-            if (this.href && !this.href.startsWith('http')) {
-                console.log('Navigating to:', this.href);
-                // Add loading state here if needed
-            }
-        });
-    });
-});
-
-// Basic error handling
-window.addEventListener('error', function(e) {
-    console.error('JavaScript error:', e.error);
-});
-
-// API health check
-async function checkAPIHealth() {
-    try {
-        const response = await fetch('/health');
-        const data = await response.json();
-        console.log('Frontend server health:', data);
-    } catch (error) {
-        console.error('Health check failed:', error);
-    }
-}
-
-// Run health check on load
-checkAPIHealth();`
-
-	os.WriteFile(filepath.Join(baseDir, "js", "main.js"), []byte(jsContent), 0644)
+	return fallback
 }

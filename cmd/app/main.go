@@ -35,13 +35,14 @@ func main() {
 	}
 
 	// Инициализация репозиториев
+	categoryRepo := repositories.NewCategoryRepository(db.DB)
 	productRepo := repositories.NewProductRepository(db.DB)
 	userRepo := repositories.NewUserRepository(db.DB)
-	categoryRepo := repositories.NewCategoryRepository(db.DB)
 	cartRepo := repositories.NewCartRepository(db.DB)
 	orderRepo := repositories.NewOrderRepository(db.DB)
 
 	// ПРАВИЛЬНАЯ инициализация handlers с dependency injection
+	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
 	productHandler := handlers.NewProductHandler(productRepo, categoryRepo)
 	authHandler := handlers.NewAuthHandler(userRepo, "your-jwt-secret-key")
 	cartHandler := handlers.NewCartHandler(cartRepo, productRepo)
@@ -59,7 +60,7 @@ func main() {
 	products := api.Group("/products")
 	products.Get("/", productHandler.GetProducts)
 	products.Get("/:slug", productHandler.GetProduct)
-	products.Get("/categories", productHandler.GetCategories)
+	products.Get("/categories", categoryHandler.GetCategories)
 
 	// Корзина (работает для авторизованных и неавторизованных пользователей)
 	cart := api.Group("/cart")

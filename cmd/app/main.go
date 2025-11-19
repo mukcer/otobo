@@ -1,35 +1,89 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+
+	"otobo/internal/database"
+	"otobo/internal/database/repositories"
+	"otobo/internal/handlers"
 )
 
 func main() {
 	app := fiber.New()
 
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"message": "Привет, мир! Мое приложение на Fiber в Docker!",
-			"status":  "success",
-		})
-	})
+	// Middleware
+	app.Use(logger.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "http://localhost:3000,http://localhost:3001",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+	}))
 
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status": "healthy",
-			"service": "fiber-app",
-		})
-	})
+	// Инициализация базы данных
+	db, err := database.Connect()
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	// Запуск миграций
+	if err := db.RunMigrations(); err != nil {
+		log.Fatal("Failed to run migrations:", err)
+	}
+
+	// Инициализация репозиториев
+	productRepo := repositories.NewProductRepository(db.DB)
+	userRepo := repositories.NewUserRepository(db.DB)
+	categoryRepo := repositories.NewCategoryRepository(db.DB)
+	cartRepo := repositories.NewCartRepository(db.DB)
+	orderRepo := repositories.NewOrderRepository(db.DB)
+
+	// ПРАВИЛЬНАЯ инициализация handlers с dependency injection
+	productHandler := handlers.NewProductHandler(productRepo, categoryRepo)
+	authHandler := handlers.NewAuthHandler(userRepo, "your-jwt-secret-key")
+	cartHandler := handlers.NewCartHandler(cartRepo, productRepo)
+	orderHandler := handlers.NewOrderHandler(orderRepo, cartRepo)
+
+	// Маршруты
+	api := app.Group("/api/v1")
+
+	// Аутентификация
+	auth := api.Group("/auth")
+	auth.Post("/register", authHandler.Register)
+	auth.Post("/login", authHandler.Login)
+
+	// Товары (публичные)
+	products := api.Group("/products")
+	products.Get("/", productHandler.GetProducts)
+	products.Get("/:slug", productHandler.GetProduct)
+	products.Get("/categories", productHandler.GetCategories)
+
+	// Корзина (работает для авторизованных и неавторизованных пользователей)
+	cart := api.Group("/cart")
+	cart.Get("/", cartHandler.GetCart)
+	cart.Get("/count", cartHandler.GetCartCount)
+	cart.Post("/", cartHandler.AddToCart)
+	cart.Put("/:id", cartHandler.UpdateCartItem)
+	cart.Delete("/:id", cartHandler.RemoveFromCart)
+	cart.Delete("/", cartHandler.ClearCart)
+
+	// Заказы (требует аутентификации)
+	orders := api.Group("/orders", handlers.AuthMiddleware)
+	orders.Post("/", orderHandler.CreateOrder)
+	orders.Get("/", orderHandler.GetUserOrders)
+
+	// Профиль (требует аутентификации)
+	user := api.Group("/user", handlers.AuthMiddleware)
+	user.Get("/profile", authHandler.GetProfile)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
 	}
 
-	log.Printf("🚀 Сервер запущен на порту %s", port)
-	log.Fatal(app.Listen(fmt.Sprintf(":%s", port)))
+	log.Printf("🛍️  Fashion store server started on port %s", port)
+	log.Fatal(app.Listen(":" + port))
 }

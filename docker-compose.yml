@@ -1,15 +1,53 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile #.debug
     ports:
-      - "3000:3000"
+      - "3000:3000"   # Порт вашего приложения Fiber
+      - "40000:40000" # Порт для отладчика Delve
     environment:
       - APP_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=otobo_db
+      - JWT_SECRET=your-secret-key
     volumes:
       - ./cmd/app:/app/cmd/app
+    depends_on:
+      - postgres
     restart: unless-stopped
     container_name: otobo_app
+    security_opt: # Необходимо для работы Delve внутри контейнера
+      - "seccomp:unconfined"
+     # Фронтенд сервер
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3001:3001"
+    environment:
+      - API_URL=http://app:3000
+    volumes:
+      - ./web:/app/web
+    depends_on:
+      - app
+    restart: unless-stopped
+    container_name: otobo_frontend  
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=otobo_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+volumes:
+  postgres_data:

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Магазин - Fashion Store</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/products.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <a href="/" class="logo">
+                    <i class="fas fa-crown"></i>
+                    FashionStore
+                </a>
+            </div>
+
+            <div class="navbar-menu" id="navbarMenu">
+                <!-- Меню будет заполняться через JavaScript -->
+            </div>
+
+            <button class="navbar-toggle" id="navbarToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1>Магазин одежды</h1>
+                <p>Откройте для себя последние коллекции модной женской одежды</p>
+            </div>
+
+            <!-- Filters and Products Grid -->
+            <div class="products-layout">
+                <!-- Sidebar Filters -->
+                <aside class="filters-sidebar" id="filtersSidebar">
+                    <div class="filters-header">
+                        <h3>Фильтры</h3>
+                        <button class="clear-filters" id="clearFilters">
+                            <i class="fas fa-times"></i>
+                            Очистить
+                        </button>
+                    </div>
+
+                    <!-- Categories Filter -->
+                    <div class="filter-group">
+                        <h4>Категории</h4>
+                        <div class="filter-options" id="categoriesFilter">
+                            <!-- Categories will be loaded by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Price Filter -->
+                    <div class="filter-group">
+                        <h4>Цена</h4>
+                        <div class="price-inputs">
+                            <input type="number" id="minPrice" placeholder="Мин" class="price-input">
+                            <span>-</span>
+                            <input type="number" id="maxPrice" placeholder="Макс" class="price-input">
+                        </div>
+                    </div>
+
+                    <!-- Sizes Filter -->
+                    <div class="filter-group">
+                        <h4>Размеры</h4>
+                        <div class="filter-options" id="sizesFilter">
+                            <label class="filter-checkbox">
+                                <input type="checkbox" name="size" value="xs">
+                                <span class="checkmark"></span>
+                                XS
+                            </label>
+                            <label class="filter-checkbox">
+                                <input type="checkbox" name="size" value="s">
+                                <span class="checkmark"></span>
+                                S
+                            </label>
+                            <label class="filter-checkbox">
+                                <input type="checkbox" name="size" value="m">
+                                <span class="checkmark"></span>
+                                M
+                            </label>
+                            <label class="filter-checkbox">
+                                <input type="checkbox" name="size" value="l">
+                                <span class="checkmark"></span>
+                                L
+                            </label>
+                            <label class="filter-checkbox">
+                                <input type="checkbox" name="size" value="xl">
+                                <span class="checkmark"></span>
+                                XL
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Colors Filter -->
+                    <div class="filter-group">
+                        <h4>Цвета</h4>
+                        <div class="color-options" id="colorsFilter">
+                            <!-- Colors will be loaded by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Availability Filter -->
+                    <div class="filter-group">
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="inStockOnly">
+                            <span class="checkmark"></span>
+                            Только в наличии
+                        </label>
+                    </div>
+
+                    <button class="apply-filters-btn" id="applyFilters">
+                        <i class="fas fa-filter"></i>
+                        Применить фильтры
+                    </button>
+                </aside>
+
+                <!-- Products Grid -->
+                <section class="products-section">
+                    <!-- Sort and View Options -->
+                    <div class="products-header">
+                        <div class="products-count">
+                            <span id="productsCount">Загрузка...</span> товаров
+                        </div>
+                        
+                        <div class="sort-options">
+                            <select id="sortBy" class="sort-select">
+                                <option value="created_at">По новизне</option>
+                                <option value="price">По цене</option>
+                                <option value="name">По названию</option>
+                            </select>
+                            
+                            <select id="sortOrder" class="sort-select">
+                                <option value="desc">По убыванию</option>
+                                <option value="asc">По возрастанию</option>
+                            </select>
+
+                            <button class="view-toggle" id="viewToggle">
+                                <i class="fas fa-th" id="viewIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Products Grid -->
+                    <div class="products-grid" id="productsGrid">
+                        <div class="loading-spinner">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Загрузка товаров...</p>
+                        </div>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="pagination" id="pagination">
+                        <!-- Pagination will be generated by JavaScript -->
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Product Modal -->
+    <div class="modal" id="productModal">
+        <div class="modal-content">
+            <span class="close-modal" id="closeModal">&times;</span>
+            <div class="modal-body" id="modalBody">
+                <!-- Product details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Filters Toggle -->
+    <button class="mobile-filters-toggle" id="mobileFiltersToggle">
+        <i class="fas fa-filter"></i>
+        Фильтры
+    </button>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Fashion Store. Все права защищены.</p>
+        </div>
+    </footer>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/products.js"></script>
+</body>
+</html>

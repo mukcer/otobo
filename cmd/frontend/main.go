@@ -45,15 +45,7 @@ func main() {
 	setupAPIProxy(app)
 
 	// 2. Статические файлы
-	// У вас: web/css, web/js, web/images
-	app.Static("/css", filepath.Join(webDir, "css"), fiber.Static{
-    	CacheDuration: -1, // Отключает кэширование 
-	})
-	app.Static("/js", filepath.Join(webDir, "js"), fiber.Static{
-    	CacheDuration: -1, // Отключает кэширование 
-	})
-	app.Static("/images", filepath.Join(webDir, "images"))
-	app.Static("/static", webDir) // резервный путь, если где-то /static/...
+	setupStaticFiles(app, webDir)
 
 	// 3. Страницы
 	setupPageRoutes(app)
@@ -68,6 +60,8 @@ func main() {
 	})
 
 	// 5. SPA Fallback — последний
+	setupSPAFallback(app)
+
 	app.Use(func(c *fiber.Ctx) error {
 		path := c.Path()
 
@@ -89,6 +83,7 @@ func main() {
 	// Запуск
 	port := getEnv("PORT", "3001")
 	log.Println("🚀 Frontend server started on http://localhost:" + port)
+	log.Printf("📁 Web directory: %s", webDir)
 	log.Fatal(app.Listen(":" + port))
 }
 
@@ -134,11 +129,18 @@ func setupAPIProxy(app *fiber.App) {
 		app.All(route, func(c *fiber.Ctx) error {
 			// Получаем путь после префикса
 			path := c.Params("*")
-			targetURL := "http://localhost:3000/api/v1/" + path
+			targetURL := "http://localhost:3000/" + path
 
 			// Выполняем прокси
 			if err := proxy.Do(c, targetURL); err != nil {
 				return c.Status(500).JSON(fiber.Map{
+					"error": "API server is unreachable",
+				})
+			}
+
+			if err := proxy.DoTimeout(c, targetURL, 10*time.Second); err != nil {
+				log.Printf("❌ Proxy error: %v", err)
+				return c.Status(502).JSON(fiber.Map{
 					"error": "API server is unreachable",
 				})
 			}
@@ -149,63 +151,51 @@ func setupAPIProxy(app *fiber.App) {
 		})
 	}
 }
+func setupStaticFiles(app *fiber.App, webDir string) {
+	// Для разработки отключаем кэширование
+	cacheDuration := -1 * time.Second
+	if os.Getenv("APP_ENV") == "production" {
+		cacheDuration = 24 * time.Hour
+	}
+
+	app.Static("/css", filepath.Join(webDir, "css"), fiber.Static{
+		CacheDuration: cacheDuration,
+		MaxAge:        int(cacheDuration.Seconds()),
+	})
+
+	app.Static("/js", filepath.Join(webDir, "js"), fiber.Static{
+		CacheDuration: cacheDuration,
+		MaxAge:        int(cacheDuration.Seconds()),
+	})
+
+	app.Static("/images", filepath.Join(webDir, "images"), fiber.Static{
+		CacheDuration: cacheDuration,
+	})
+
+	app.Static("/static", webDir, fiber.Static{
+		CacheDuration: cacheDuration,
+	})
+}
 
 // setupPageRoutes — страницы
-func setupPageRoutes(app *fiber.App) {
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.Render("index", fiber.Map{
-			"Title": "Fashion Store - Магазин модной женской одежды",
-			"Page":  "home",
-		})
-	})
+func setupSPAFallback(app *fiber.App) {
+	app.Use(func(c *fiber.Ctx) error {
+		path := c.Path()
 
-	app.Get("/products", func(c *fiber.Ctx) error {
-		category := c.Query("category")
-		page, _ := strconv.Atoi(c.Query("page", "1"))
-		if page < 1 {
-			page = 1
+		// Игнорируем API, статику и файлы с расширениями
+		if strings.HasPrefix(path, "/api/") ||
+			strings.HasPrefix(path, "/css/") ||
+			strings.HasPrefix(path, "/js/") ||
+			strings.HasPrefix(path, "/images/") ||
+			strings.HasPrefix(path, "/static/") ||
+			strings.Contains(path, ".") {
+			return c.SendStatus(404)
 		}
 
-		return c.Render("products", fiber.Map{
-			"Title":       "Каталог - Fashion Store",
-			"Page":        "products",
-			"Category":    category,
-			"CurrentPage": page,
-		})
-	})
-
-	app.Get("/login", func(c *fiber.Ctx) error {
-		return c.Render("login", fiber.Map{
-			"Title": "Вход - Fashion Store",
-			"Page":  "login",
-		})
-	})
-
-	app.Get("/register", func(c *fiber.Ctx) error {
-		return c.Render("register", fiber.Map{
-			"Title": "Регистрация - Fashion Store",
-			"Page":  "register",
-		})
-	})
-
-	app.Get("/profile", func(c *fiber.Ctx) error {
-		return c.Render("profile", fiber.Map{
-			"Title": "Профиль - Fashion Store",
-			"Page":  "profile",
-		})
-	})
-
-	app.Get("/admin/products", func(c *fiber.Ctx) error {
-		return c.Render("admin_products", fiber.Map{
-			"Title": "Управление товарами",
-			"Page":  "admin_products",
-		})
-	})
-
-	app.Get("/cart", func(c *fiber.Ctx) error {
-		return c.Render("cart", fiber.Map{
-			"Title": "Корзина - Fashion Store",
-			"Page":  "cart",
+		// Для всех остальных маршрутов отдаем SPA
+		return c.Render("index", fiber.Map{
+			"Title": "ODOBO Store",
+			"Page":  "app",
 		})
 	})
 }
@@ -216,4 +206,52 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func setupPageRoutes(app *fiber.App) {
+	pages := map[string]struct {
+		title string
+		page  string
+	}{
+		"/":               {"Магазин модной женской одежды", "home"},
+		"/products":       {"Каталог", "products"},
+		"/login":          {"Вход", "login"},
+		"/register":       {"Регистрация", "register"},
+		"/profile":        {"Профиль", "profile"},
+		"/admin/products": {"Управление товарами", "admin_products"},
+		"/cart":           {"Корзина", "cart"},
+	}
+
+	for path, config := range pages {
+		if path == "/products" {
+			app.Get(path, createProductsHandler(config))
+		} else {
+			app.Get(path, createDefaultHandler(config))
+		}
+	}
+}
+
+func createDefaultHandler(config struct{ title, page string }) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		return c.Render("index", fiber.Map{
+			"Title": config.title + " - ODOBO store",
+			"Page":  config.page,
+		})
+	}
+}
+
+func createProductsHandler(config struct{ title, page string }) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		category := c.Query("category")
+		pageNum, _ := strconv.Atoi(c.Query("page", "1"))
+		if pageNum < 1 {
+			pageNum = 1
+		}
+		return c.Render("index", fiber.Map{
+			"Title":       config.title + " - ODOBO store",
+			"Page":        config.page,
+			"Category":    category,
+			"CurrentPage": pageNum,
+		})
+	}
 }

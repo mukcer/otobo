@@ -1,534 +1,521 @@
-class AdminProductsManager {
+class AdminProducts {
     constructor() {
         this.currentPage = 1;
-        this.limit = 10;
-        this.filters = {
-            search: '',
+        this.totalPages = 1;
+        this.products = [];
+        this.categories = [];
+
+        this.defaultFilters = {
             category: '',
-            status: ''
+            status: [],
+            minPrice: '',
+            maxPrice: '',
+            inStockOnly: false,
+            sortBy: 'created_at',
+            sortOrder: 'desc',
+            search: ''
         };
-        this.currentProductId = null;
-        this.uploadedImages = [];
-        this.features = [];
-        this.variations = [];
-        
+
+        this.currentFilters = { ...this.defaultFilters };
+
         this.init();
     }
 
     init() {
-        this.loadProducts();
-        this.loadCategories();
+        this.loadInitialData();
+        this.fetchCategories();
         this.setupEventListeners();
+        this.loadProducts();
     }
 
-    setupEventListeners() {
-        // Form submission
-        document.getElementById('productForm').addEventListener('submit', (e) => this.handleFormSubmit(e));
-        
-        // Auto-generate slug from name
-        document.getElementById('productName').addEventListener('input', (e) => {
-            if (!this.currentProductId) { // Only auto-generate for new products
-                this.generateSlug(e.target.value);
-            }
-        });
-    }
-
-    async loadProducts() {
-        const tbody = document.getElementById('productsTableBody');
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="loading-row">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    Загрузка товаров...
-                </td>
-            </tr>
-        `;
-
-        try {
-            const params = {
-                page: this.currentPage,
-                limit: this.limit,
-                ...this.filters
-            };
-
-            // Remove empty filters
-            Object.keys(params).forEach(key => {
-                if (!params[key]) delete params[key];
-            });
-
-            const response = await this.apiRequest('/admin/products', 'GET', null, params);
-            this.renderProductsTable(response.products);
-            this.renderPagination(response.total, response.pages);
-            this.updateStats(response.stats);
-
-        } catch (error) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="loading-row">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        Ошибка загрузки: ${error.message}
-                    </td>
-                </tr>
-            `;
+    loadInitialData() {
+        const dataEl = document.getElementById('initialData');
+        if (dataEl) {
+            const data = JSON.parse(dataEl.textContent);
+            this.currentPage = data.currentPage || 1;
+            this.currentFilters.search = data.searchQuery || '';
+            document.getElementById('searchProducts').value = this.currentFilters.search;
         }
     }
 
-    renderProductsTable(products) {
-        const tbody = document.getElementById('productsTableBody');
-        
-        if (products.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="loading-row">
-                        Товары не найдены
-                    </td>
-                </tr>
+    setupEventListeners() {
+        // Применить фильтры
+        document.getElementById('applyFilters').addEventListener('click', () => this.applyFilters());
+        document.getElementById('clearFilters').addEventListener('click', () => this.clearFilters());
+
+        // Сортировка
+        document.getElementById('sortBy').addEventListener('change', () => {
+            this.currentFilters.sortBy = document.getElementById('sortBy').value;
+            this.loadProducts();
+        });
+
+        document.getElementById('sortOrder').addEventListener('change', () => {
+            this.currentFilters.sortOrder = document.getElementById('sortOrder').value;
+            this.loadProducts();
+        });
+
+        // Поиск
+        // Уже есть onkeyup в HTML
+
+        // Мобильные фильтры
+        const mobileToggle = document.getElementById('mobileFiltersToggle');
+        const sidebar = document.getElementById('filtersSidebar');
+        if (mobileToggle && sidebar) {
+            mobileToggle.addEventListener('click', () => {
+                sidebar.classList.toggle('active');
+            });
+        }
+
+        // Закрытие по клику вне
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.filters-sidebar') && !e.target.closest('#mobileFiltersToggle')) {
+                sidebar.classList.remove('active');
+            }
+        });
+
+        // Закрытие модальных окон
+        document.querySelectorAll('.close-modal').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.closest('.modal').style.display = 'none';
+            });
+        });
+
+        // Форма товара
+        const form = document.getElementById('productForm');
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleSubmit(e));
+        }
+
+        // Удаление товара
+        document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+            this.performDelete();
+        });
+    }
+
+    applyFilters() {
+        const categorySelect = document.getElementById('categoryFilter');
+        if (categorySelect) {
+            this.currentFilters.category = categorySelect.value;
+        }
+
+        this.currentFilters.status = [];
+        if (document.getElementById('filterActive').checked) this.currentFilters.status.push('active');
+        if (document.getElementById('filterInactive').checked) this.currentFilters.status.push('inactive');
+        if (document.getElementById('filterOutOfStock').checked) this.currentFilters.status.push('out_of_stock');
+
+        this.currentFilters.minPrice = document.getElementById('minPrice').value;
+        this.currentFilters.maxPrice = document.getElementById('maxPrice').value;
+        this.currentFilters.inStockOnly = document.getElementById('inStockOnly').checked;
+
+        this.loadProducts();
+    }
+
+    clearFilters() {
+        document.getElementById('categoryFilter').value = '';
+        document.getElementById('minPrice').value = '';
+        document.getElementById('maxPrice').value = '';
+        document.getElementById('filterActive').checked = false;
+        document.getElementById('filterInactive').checked = false;
+        document.getElementById('filterOutOfStock').checked = false;
+        document.getElementById('inStockOnly').checked = false;
+
+        this.currentFilters = { ...this.defaultFilters };
+        document.getElementById('searchProducts').value = '';
+        this.loadProducts();
+    }
+
+    searchProducts(event) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => {
+            this.currentFilters.search = event.target.value.trim();
+            this.loadProducts();
+        }, 500);
+    }
+
+    async loadProducts(page = 1) {
+        this.currentPage = page;
+
+        const url = new URL('/api/v1/admin/products', window.location.origin);
+        const params = {
+            page: this.currentPage,
+            limit: 10,
+            search: this.currentFilters.search,
+            category_id: this.currentFilters.category,
+            min_price: this.currentFilters.minPrice,
+            max_price: this.currentFilters.maxPrice,
+            in_stock: this.currentFilters.inStockOnly ? 1 : '',
+            sort_by: this.currentFilters.sortBy,
+            sort_order: this.currentFilters.sortOrder
+        };
+
+        if (this.currentFilters.status.length) {
+            params.status = this.currentFilters.status.join(',');
+        }
+
+        Object.keys(params).forEach(key => {
+            if (params[key]) {
+                url.searchParams.append(key, params[key]);
+            }
+        });
+
+        try {
+            const data = await api.getProducts(params);
+
+            this.renderProducts(data.products);
+            this.renderPagination(data.pages);
+            this.updateStats(data.products);
+            } catch (err) {
+            this.showError('Не удалось загрузить товары');
+        }
+    }
+
+    renderProducts(products) {
+        const grid = document.getElementById('productsGrid');
+
+       if (products.length === 0) {
+            grid.innerHTML = `
+                <div class="no-results">
+                    <i class="fas fa-search"></i>
+                    <h3>Товары не найдены</h3>
+                    <p>Попробуйте изменить параметры фильтрации</p>
+                    <button onclick="products.clearFilters()" class="btn btn-primary">
+                        <i class="fas fa-times"></i>
+                        Очистить фильтры
+                    </button>
+                </div>
             `;
             return;
         }
 
-        tbody.innerHTML = products.map(product => `
-            <tr>
-                <td>${product.id}</td>
-                <td>
-                    <div class="product-image-small">
-                        ${product.images && product.images.length > 0 ? 
-                            `<img src="${product.images[0]}" alt="${product.name}">` :
-                            `<i class="fas fa-image"></i>`
+        // tbody.innerHTML = this.products.map(p => `
+        //     <tr data-id="${p.id}">
+        //         <td>${p.id}</td>
+        //         <td>
+        //             <div class="product-image">
+        //                 <img src="${p.image || '/static/images/placeholder.jpg'}" alt="${p.name}" onerror="this.src='/static/images/placeholder.jpg'">
+        //             </div>
+        //         </td>
+        //         <td>
+        //             <div class="product-info">
+        //                 <strong>${this.escapeHtml(p.name)}</strong>
+        //                 <small>Артикул: ${p.sku}</small>
+        //             </div>
+        //         </td>
+        //         <td>${this.escapeHtml(p.category?.name || '–')}</td>
+        //         <td>${p.price} ₽</td>
+        //         <td>
+        //             <span class="status-badge ${p.is_active ? 'active' : 'inactive'}">
+        //                 ${p.is_active ? 'Активен' : 'Неактивен'}
+        //             </span>
+        //         </td>
+        //         <td>${p.stock || 0}</td>
+        //         <td>${this.formatDate(p.created_at)}</td>
+        //         <td class="actions">
+        //             <button class="action-btn view" title="Просмотр" onclick="adminProducts.openViewModal(${p.id})">
+        //                 <i class="fas fa-eye"></i>
+        //             </button>
+        //             <button class="action-btn edit" title="Редактировать" onclick="adminProducts.openEditModal(${p.id})">
+        //                 <i class="fas fa-edit"></i>
+        //             </button>
+        //             <button class="action-btn delete" title="Удалить" onclick="adminProducts.openDeleteModal(${p.id})">
+        //                 <i class="fas fa-trash"></i>
+        //             </button>
+        //         </td>
+        //     </tr>
+        // `).join('');
+        grid.innerHTML = products.map(product => `
+            <div class="product-card" onclick="products.openProductModal('${product.id}')">
+                <div class="product-image">
+                    ${product.images && product.images.length > 0 ? 
+                        `<img src="${product.images[0] || '/static/images/placeholder.jpg'}" alt="${product.name}" loading="lazy">` :
+                        `<i class="fas fa-image" style="font-size: 3rem; color: #ddd;"></i>`
+                    }
+                </div>
+                <div class="product-info">
+                    <div class="product-category">${product.category?.name || 'Без категории'}</div>
+                    <h3 class="product-title">${product.name}</h3>
+                    <p class="product-description">${product.description || ''}</p>
+                    
+                    <div class="product-price">
+                        <span class="current-price">${this.formatPrice(product.price)} ₽</span>
+                        ${product.compare_price ? 
+                            `<span class="original-price">${this.formatPrice(product.compare_price)} ₽</span>` : 
+                            ''
                         }
                     </div>
-                </td>
-                <td>
-                    <strong>${product.name}</strong>
-                    <div class="product-sku">${product.sku}</div>
-                </td>
-                <td>${product.category?.name || '—'}</td>
-                <td>${this.formatPrice(product.price)} ₽</td>
-                <td>
-                    <span class="status-badge ${this.getStatusClass(product)}">
-                        ${this.getStatusText(product)}
-                    </span>
-                </td>
-                <td>
-                    ${this.getTotalStock(product.variations)}
-                </td>
-                <td>${this.formatDate(product.created_at)}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-sm btn-edit" onclick="adminProducts.openEditModal(${product.id})">
-                            <i class="fas fa-edit"></i>
-                            Редакт.
-                        </button>
-                        <button class="btn-sm btn-delete" onclick="adminProducts.openDeleteModal(${product.id})">
-                            <i class="fas fa-trash"></i>
-                            Удалить
-                        </button>
+                    
+                    <div class="product-meta">
+                        <span class="${product.in_stock ? 'in-stock' : 'out-of-stock'}">
+                            <i class="fas ${product.in_stock ? 'fa-check' : 'fa-times'}"></i>
+                            ${product.in_stock ? 'В наличии' : 'Нет в наличии'}
+                        </span>
+                        <span class="product-sku">${product.sku}</span>
                     </div>
-                </td>
-            </tr>
+                </div>
+                <div class="actions">
+                    <button class="action-btn view" title="Просмотр" onclick="adminProducts.openViewModal(${product.id})">
+                         <i class="fas fa-eye"></i>
+                     </button>
+                     <button class="action-btn edit" title="Редактировать" onclick="adminProducts.openEditModal(${product.id})">
+                         <i class="fas fa-edit"></i>
+                     </button>
+                     <button class="action-btn delete" title="Удалить" onclick="adminProducts.openDeleteModal(${product.id})">
+                         <i class="fas fa-trash"></i>
+                     </button>
+                </div>
+            </div>
         `).join('');
+        // Apply view mode
+        grid.className = `products-grid ${this.viewMode}-view`;
     }
 
-    getStatusClass(product) {
-        if (!product.is_active) return 'status-inactive';
-        if (!product.in_stock) return 'status-out-of-stock';
-        return 'status-active';
+    renderPagination(totalPages) {
+        const container = document.getElementById('pagination');
+        container.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        const fragment = document.createDocumentFragment();
+
+        // Prev
+        if (this.currentPage > 1) {
+            const prev = this.createPageButton('«', this.currentPage - 1);
+            fragment.appendChild(prev);
+        }
+
+        // First
+        if (this.currentPage > 2) {
+            const first = this.createPageButton('1', 1);
+            fragment.appendChild(first);
+            if (this.currentPage > 3) {
+                const ellipsis = document.createElement('span');
+                ellipsis.textContent = '...';
+                fragment.appendChild(ellipsis);
+            }
+        }
+
+        // Current range
+        const start = Math.max(1, this.currentPage - 1);
+        const end = Math.min(this.totalPages, this.currentPage + 1);
+
+        for (let i = start; i <= end; i++) {
+            const btn = this.createPageButton(i, i, i === this.currentPage);
+            fragment.appendChild(btn);
+        }
+
+        // Last
+        if (this.currentPage < this.totalPages - 1) {
+            if (this.currentPage < this.totalPages - 2) {
+                const ellipsis = document.createElement('span');
+                ellipsis.textContent = '...';
+                fragment.appendChild(ellipsis);
+            }
+            const last = this.createPageButton(this.totalPages, this.totalPages);
+            fragment.appendChild(last);
+        }
+
+        // Next
+        if (this.currentPage < this.totalPages) {
+            const next = this.createPageButton('»', this.currentPage + 1);
+            fragment.appendChild(next);
+        }
+
+        container.appendChild(fragment);
     }
 
-    getStatusText(product) {
-        if (!product.is_active) return 'Неактивен';
-        if (!product.in_stock) return 'Нет в наличии';
-        return 'Активен';
+    createPageButton(label, page, active = false) {
+        const btn = document.createElement('button');
+        btn.textContent = label;
+        btn.className = active ? 'active' : '';
+        btn.onclick = () => this.loadProducts(page);
+        return btn;
     }
 
-    getTotalStock(variations) {
-        if (!variations || variations.length === 0) return 0;
-        return variations.reduce((sum, variation) => sum + (variation.quantity || 0), 0);
+    updateStats(products) {
+        const total = products.length;
+        const active = products.filter(p => p.is_active).length;
+        const outOfStock = products.filter(p => p.stock <= 0).length;
+
+        document.getElementById('totalProducts').textContent = total;
+        document.getElementById('activeProducts').textContent = active;
+        document.getElementById('outOfStock').textContent = outOfStock;
     }
 
-    async openCreateModal() {
-        this.currentProductId = null;
-        document.getElementById('modalTitle').textContent = 'Добавить товар';
-        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Сохранить товар';
-        
-        this.resetForm();
-        this.loadCategoriesForForm();
-        await this.loadSizesAndColors();
-        
-        document.getElementById('productFormModal').style.display = 'block';
-    }
-
-    async openEditModal(productId) {
+    async fetchCategories() {
         try {
-            const product = await this.apiRequest(`/admin/products/${productId}`);
-            
-            this.currentProductId = productId;
-            document.getElementById('modalTitle').textContent = 'Редактировать товар';
-            document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Обновить товар';
-            
-            this.populateForm(product);
-            this.loadCategoriesForForm();
-            await this.loadSizesAndColors();
-            
-            document.getElementById('productFormModal').style.display = 'block';
-            
-        } catch (error) {
-            this.showNotification('Ошибка загрузки товара', 'error');
+            const data = await api.getCategories();
+            this.categories = data.data || [];
+
+            this.renderCategoryOptions();
+        } catch (err) {
+            console.warn('Не удалось загрузить категории');
         }
     }
 
-    populateForm(product) {
+    renderCategoryOptions() {
+        const el = document.getElementById('categoryFilter');
+        if (!el) return;
+
+        el.innerHTML = '<option value="">Все категории</option>';
+        this.categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            el.appendChild(option);
+        });
+    }
+
+    async openViewModal(id) {
+        const product = await api.getProductByID(id);
+        if (!product) return;
+
+        const modalBody = document.getElementById('modalBody');
+        modalBody.innerHTML = `
+            <div class="product-detail">
+                <div class="detail-image">
+                    <img src="${product.image || '/static/images/placeholder.jpg'}" alt="${product.name}">
+                </div>
+                <div class="detail-info">
+                    <h3>${this.escapeHtml(product.name)}</h3>
+                    <p class="detail-description">${this.escapeHtml(product.description || '–')}</p>
+                    
+                    <div class="detail-meta">
+                        <div><strong>Цена:</strong> ${product.price} ₽</div>
+                        <div><strong>Артикул:</strong> ${product.sku}</div>
+                        <div><strong>Категория:</strong> ${this.escapeHtml(product.category?.name || '–')}</div>
+                        <div><strong>Наличие:</strong> ${product.stock > 0 ? `${product.stock} шт.` : '<span class="out-of-stock">Нет в наличии</span>'}</div>
+                        <div><strong>Дата:</strong> ${this.formatDate(product.created_at)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('productModal').style.display = 'block';
+    }
+
+    async openEditModal(id) {
+        this.openCreateModal();
+        document.getElementById('modalTitle').textContent = 'Редактировать товар';
+        document.getElementById('submitBtn').textContent = 'Сохранить изменения';
+
+        try {
+            const product = await api.getProductByID(id);
+
+        // Заполняем поля формы
         document.getElementById('productName').value = product.name || '';
         document.getElementById('productSlug').value = product.slug || '';
         document.getElementById('productSKU').value = product.sku || '';
         document.getElementById('productDescription').value = product.description || '';
         document.getElementById('productPrice').value = product.price || '';
         document.getElementById('productComparePrice').value = product.compare_price || '';
-        document.getElementById('productInStock').checked = product.in_stock || false;
-        document.getElementById('productIsActive').checked = product.is_active !== false;
 
-        // Set category
-        setTimeout(() => {
-            const categorySelect = document.getElementById('productCategory');
-            if (product.category_id) {
-                categorySelect.value = product.category_id;
+        // Установка категории (если есть <select id="productCategory">)
+        const categorySelect = document.getElementById('productCategory');
+        if (categorySelect) {
+            for (let option of categorySelect.options) {
+                if (option.value == product.category_id) {
+                    option.selected = true;
+                    break;
+                }
             }
-        }, 100);
-
-        // Images
-        this.uploadedImages = product.images || [];
-        this.renderImagePreviews();
-
-        // Features
-        this.features = product.features || [];
-        this.renderFeatures();
-
-        // Variations
-        this.variations = product.variations || [];
-        this.renderVariations();
-    }
-
-    resetForm() {
-        document.getElementById('productForm').reset();
-        this.uploadedImages = [];
-        this.features = [];
-        this.variations = [];
-        
-        this.renderImagePreviews();
-        this.renderFeatures();
-        this.renderVariations();
-        
-        this.clearErrors();
-    }
-
-    async handleFormSubmit(e) {
-        e.preventDefault();
-        
-        if (!this.validateForm()) {
-            return;
         }
 
-        const formData = this.getFormData();
-        const submitBtn = document.getElementById('submitBtn');
-        const originalText = submitBtn.innerHTML;
+        // Чекбоксы
+        document.getElementById('productInStock').checked = !!product.in_stock;
+        document.getElementById('productIsActive').checked = !!product.is_active;
 
-        try {
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
-            submitBtn.disabled = true;
+        // Очистка предыдущих изображений
+        document.getElementById('imagePreview').innerHTML = '';
 
-            let response;
-            if (this.currentProductId) {
-                response = await this.apiRequest(`/admin/products/${this.currentProductId}`, 'PUT', formData);
-            } else {
-                response = await this.apiRequest('/admin/products', 'POST', formData);
-            }
-
-            this.showNotification(
-                this.currentProductId ? 'Товар успешно обновлен' : 'Товар успешно создан', 
-                'success'
-            );
-            
-            this.closeModal();
-            this.loadProducts();
-
-        } catch (error) {
-            this.showNotification(error.message, 'error');
-            this.displayFormErrors(error.errors || {});
-        } finally {
-            submitBtn.innerHTML = originalText;
-            submitBtn.disabled = false;
-        }
-    }
-
-    getFormData() {
-        return {
-            name: document.getElementById('productName').value,
-            slug: document.getElementById('productSlug').value,
-            description: document.getElementById('productDescription').value,
-            sku: document.getElementById('productSKU').value,
-            category_id: parseInt(document.getElementById('productCategory').value),
-            price: parseFloat(document.getElementById('productPrice').value),
-            compare_price: document.getElementById('productComparePrice').value ? 
-                parseFloat(document.getElementById('productComparePrice').value) : 0,
-            in_stock: document.getElementById('productInStock').checked,
-            is_active: document.getElementById('productIsActive').checked,
-            images: this.uploadedImages,
-            features: this.features,
-            variations: this.variations
-        };
-    }
-
-    validateForm() {
-        let isValid = true;
-        this.clearErrors();
-
-        const requiredFields = [
-            'productName', 'productSlug', 'productSKU', 'productCategory', 'productPrice'
-        ];
-
-        requiredFields.forEach(fieldId => {
-            const field = document.getElementById(fieldId);
-            if (!field.value.trim()) {
-                this.showFieldError(fieldId, 'Это поле обязательно для заполнения');
-                isValid = false;
-            }
-        });
-
-        // Validate slug format
-        const slug = document.getElementById('productSlug').value;
-        if (slug && !/^[a-z0-9-]+$/.test(slug)) {
-            this.showFieldError('productSlug', 'Slug может содержать только латинские буквы, цифры и дефисы');
-            isValid = false;
-        }
-
-        return isValid;
-    }
-
-    generateSlug(name) {
-        const slug = name
-            .toLowerCase()
-            .replace(/[^a-z0-9а-яё\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '');
-        
-        document.getElementById('productSlug').value = slug;
-    }
-
-    // Image handling
-    handleImageUpload(event) {
-        const files = event.target.files;
-        
-        for (let file of files) {
-            if (!file.type.startsWith('image/')) {
-                this.showNotification('Пожалуйста, выбирайте только изображения', 'error');
-                continue;
-            }
-
-            if (file.size > 5 * 1024 * 1024) { // 5MB
-                this.showNotification('Размер изображения не должен превышать 5MB', 'error');
-                continue;
-            }
-
-            this.previewImage(file);
-        }
-
-        event.target.value = ''; // Reset input
-    }
-
-    previewImage(file) {
-        const reader = new FileReader();
-        
-        reader.onload = (e) => {
-            const imageData = e.target.result;
-            this.uploadedImages.push(imageData);
-            this.renderImagePreviews();
-        };
-        
-        reader.readAsDataURL(file);
-    }
-
-    renderImagePreviews() {
-        const container = document.getElementById('imagePreview');
-        
-        container.innerHTML = this.uploadedImages.map((image, index) => `
-            <div class="image-preview-item">
-                <img src="${image}" alt="Preview ${index + 1}">
-                <button type="button" class="remove-image" onclick="adminProducts.removeImage(${index})">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `).join('');
-    }
-
-    removeImage(index) {
-        this.uploadedImages.splice(index, 1);
-        this.renderImagePreviews();
-    }
-
-    // Features handling
-    addFeature() {
-        const input = document.getElementById('newFeature');
-        const feature = input.value.trim();
-        
-        if (feature && !this.features.includes(feature)) {
-            this.features.push(feature);
-            this.renderFeatures();
-            input.value = '';
-        }
-    }
-
-    removeFeature(index) {
-        this.features.splice(index, 1);
-        this.renderFeatures();
-    }
-
-    renderFeatures() {
-        const container = document.getElementById('featuresList');
-        
-        container.innerHTML = this.features.map((feature, index) => `
-            <div class="feature-tag">
-                ${feature}
-                <button type="button" class="remove-feature" onclick="adminProducts.removeFeature(${index})">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `).join('');
-    }
-
-    // Variations handling
-    addVariation() {
-        this.variations.push({
-            size_id: '',
-            color_id: '',
-            quantity: 0,
-            image_url: ''
-        });
-        this.renderVariations();
-    }
-
-    removeVariation(index) {
-        this.variations.splice(index, 1);
-        this.renderVariations();
-    }
-
-    updateVariation(index, field, value) {
-        this.variations[index][field] = value;
-    }
-
-    renderVariations() {
-        const container = document.getElementById('variationsList');
-        
-        container.innerHTML = this.variations.map((variation, index) => `
-            <div class="variation-item">
-                <div class="variation-fields">
-                    <div class="form-group">
-                        <label>Размер</label>
-                        <select onchange="adminProducts.updateVariation(${index}, 'size_id', this.value)">
-                            <option value="">Выберите размер</option>
-                            ${this.sizes ? this.sizes.map(size => `
-                                <option value="${size.id}" ${variation.size_id === size.id ? 'selected' : ''}>
-                                    ${size.name}
-                                </option>
-                            `).join('') : ''}
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Цвет</label>
-                        <select onchange="adminProducts.updateVariation(${index}, 'color_id', this.value)">
-                            <option value="">Выберите цвет</option>
-                            ${this.colors ? this.colors.map(color => `
-                                <option value="${color.id}" ${variation.color_id === color.id ? 'selected' : ''}>
-                                    ${color.name}
-                                </option>
-                            `).join('') : ''}
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Количество</label>
-                        <input type="number" value="${variation.quantity}" 
-                               onchange="adminProducts.updateVariation(${index}, 'quantity', this.value)">
-                    </div>
-                    
-                    <button type="button" class="remove-variation" onclick="adminProducts.removeVariation(${index})">
+        // Предпросмотр изображений
+        if (product.images && product.images.length > 0) {
+            product.images.forEach(img => {
+                const preview = document.createElement('div');
+                preview.className = 'image-item';
+                preview.innerHTML = `
+                    <img src="${img.url}" alt="image" style="width: 100px; height: 100px; object-fit: cover;">
+                    <button type="button" class="remove-image" onclick="this.parentElement.remove()">
                         <i class="fas fa-times"></i>
                     </button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // API methods
-    async apiRequest(endpoint, method = 'GET', data = null, params = null) {
-        const url = new URL(`${window.location.origin}${endpoint}`);
-        
-        if (params) {
-            Object.keys(params).forEach(key => {
-                if (params[key]) url.searchParams.append(key, params[key]);
+                `;
+                document.getElementById('imagePreview').appendChild(preview);
             });
         }
 
-        const options = {
-            method,
-            headers: {
-                'Content-Type': 'application/json',
+        // Сохраняем ID товара для последующего PUT-запроса
+        document.getElementById('productForm').dataset.productId = product.id;
+
+    } catch (error) {
+        console.error('Failed to load product:', error);
+        this.showError('Не удалось загрузить товар для редактирования');
+    }
+}
+
+    openCreateModal() {
+        document.getElementById('modalTitle').textContent = 'Добавить товар';
+        document.getElementById('submitBtn').textContent = 'Создать товар';
+        document.getElementById('productForm').reset();
+        document.getElementById('imagePreview').innerHTML = '';
+        document.getElementById('productFormModal').style.display = 'block';
+    }
+
+    openDeleteModal(id) {
+        document.getElementById('deleteModal').style.display = 'block';
+        document.getElementById('confirmDeleteBtn').dataset.id = id;
+    }
+
+    closeDeleteModal() {
+        document.getElementById('deleteModal').style.display = 'none';
+    }
+
+    async performDelete() {
+        const id = document.getElementById('confirmDeleteBtn').dataset.id;
+        if (!id) return;
+
+        try {
+            const response = await fetch(`/api/v1/admin/products/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (response.ok) {
+                this.closeDeleteModal();
+                this.loadProducts();
+            } else {
+                this.showError('Не удалось удалить товар');
             }
-        };
-
-        if (data && (method === 'POST' || method === 'PUT')) {
-            options.body = JSON.stringify(data);
-        }
-
-        const response = await fetch(url, options);
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.error || 'Request failed');
-        }
-
-        return result;
-    }
-
-    // Utility methods
-    showFieldError(fieldId, message) {
-        const errorElement = document.getElementById(fieldId + 'Error');
-        const fieldElement = document.getElementById(fieldId);
-        
-        if (errorElement && fieldElement) {
-            errorElement.textContent = message;
-            fieldElement.classList.add('error');
+        } catch (err) {
+            this.showError('Ошибка соединения');
         }
     }
 
-    clearErrors() {
-        document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
-        document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+    async handleSubmit(e) {
+        e.preventDefault();
+        // Здесь будет логика сохранения
+        alert('Форма сохранения временно недоступна');
     }
 
-    displayFormErrors(errors) {
-        Object.keys(errors).forEach(field => {
-            this.showFieldError('product' + this.capitalize(field), errors[field]);
-        });
+    showError(message) {
+        alert(message);
+        // Можно сделать красивый тост
     }
 
-    capitalize(str) {
-        return str.charAt(0).toUpperCase() + str.slice(1);
+    formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ru-RU');
     }
 
-    showNotification(message, type = 'success') {
-        // Use the notification system from main.js
-        if (window.app && typeof window.app.showNotification === 'function') {
-            window.app.showNotification(message, type);
-        } else {
-            alert(message);
-        }
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
-
     formatPrice(price) {
         return new Intl.NumberFormat('ru-RU').format(price);
     }
+}
 
-    formatDate(dateString) {
-        return new Date(dateString).toLocaleDate
+// Глобальный экземпляр
+window.adminProducts = new AdminProducts();

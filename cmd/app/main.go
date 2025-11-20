@@ -58,9 +58,10 @@ func main() {
 
 	// Товары (публичные)
 	products := api.Group("/products")
-	products.Get("/", productHandler.GetProducts)
-	products.Get("/:slug", productHandler.GetProduct)
 	products.Get("/categories", categoryHandler.GetCategories)
+	products.Get("/", productHandler.GetProducts)
+	products.Get("/id/:id", productHandler.GetProductByID)
+	products.Get("/:slug", productHandler.GetProduct)
 
 	// Корзина (работает для авторизованных и неавторизованных пользователей)
 	cart := api.Group("/cart")

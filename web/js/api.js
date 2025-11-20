@@ -64,6 +64,9 @@ class API {
     async getProduct(slug) {
         return this.request(`/products/${slug}`);
     }
+    async getProductByID(id) {
+        return this.request(`/products/id/${id}`);
+    }
 
     async getCategories() {
         return this.request('/products/categories');

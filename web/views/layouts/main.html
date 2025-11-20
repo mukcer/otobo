@@ -10,6 +10,11 @@
     {{if eq .Page "products"}}
     <link rel="stylesheet" href="/static/css/products.css">
     {{end}}
+    {{if eq .Page "admin_products"}}
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/products.css">
+    {{end}}
+
     {{if or (eq .Page "login") (eq .Page "register")}}
     <link rel="stylesheet" href="/static/css/auth.css">
     {{end}}
@@ -80,6 +85,9 @@
     
     {{if eq .Page "products"}}
     <script src="/static/js/products.js"></script>
+    {{end}}
+    {{if eq .Page "admin_products"}}
+    <script src="/static/js/admin.js"></script>
     {{end}}
     {{if or (eq .Page "login") (eq .Page "register")}}
     <script src="/static/js/auth.js"></script>

@@ -46,8 +46,12 @@ func main() {
 
 	// 2. Статические файлы
 	// У вас: web/css, web/js, web/images
-	app.Static("/css", filepath.Join(webDir, "css"))
-	app.Static("/js", filepath.Join(webDir, "js"))
+	app.Static("/css", filepath.Join(webDir, "css"), fiber.Static{
+    	CacheDuration: -1, // Отключает кэширование 
+	})
+	app.Static("/js", filepath.Join(webDir, "js"), fiber.Static{
+    	CacheDuration: -1, // Отключает кэширование 
+	})
 	app.Static("/images", filepath.Join(webDir, "images"))
 	app.Static("/static", webDir) // резервный путь, если где-то /static/...
 

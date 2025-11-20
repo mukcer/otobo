@@ -4,6 +4,14 @@
     <div class="page-header">
         <h1>Управление товарами</h1>
         <p>Добавление и редактирование товаров магазина</p>
+        {{if .Category}}
+        <div class="current-filter">
+            Категория: <strong>{{.Category}}</strong>
+            <a href="/products" class="clear-filter">
+                <i class="fas fa-times"></i>
+            </a>
+        </div>
+        {{end}}
     </div>
 
     <!-- Admin Actions -->
@@ -29,58 +37,163 @@
         </div>
     </div>
 
-    <!-- Products Table -->
-    <div class="admin-table-container">
-        <div class="table-header">
-            <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchProducts" placeholder="Поиск товаров..." onkeyup="adminProducts.searchProducts(event)">
+    <!-- Server-Side Rendered Initial Data -->
+    <script id="initialData" type="application/json">
+       {
+            "category": "{{.Category}}",
+            "currentPage": {{.CurrentPage}}
+        }
+    </script>
+
+    <!-- Filters and Table Layout -->
+    <div class="products-layout">
+        <!-- Sidebar Filters -->
+        <aside class="filters-sidebar" id="filtersSidebar">
+            <div class="filters-header">
+                <h3>Фильтры</h3>
+                <button class="clear-filters" id="clearFilters">
+                    <i class="fas fa-times"></i>
+                    Очистить
+                </button>
             </div>
-            
-            <div class="table-actions">
-                <select id="categoryFilter" onchange="adminProducts.applyFilters()">
-                    <option value="">Все категории</option>
-                </select>
+
+            <!-- Category Filter -->
+            <div class="filter-group">
+                <h4>Категория</h4>
+                <div class="filter-options" id="categoryFilter">
+                    <!-- Will be loaded by JS -->
+                </div>
+            </div>
+
+            <!-- Status Filter -->
+            <div class="filter-group">
+                <h4>Статус</h4>
+                <div class="filter-options">
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="filterActive" name="status" value="active">
+                        <span class="checkmark"></span>
+                        Активные
+                    </label>
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="filterInactive" name="status" value="inactive">
+                        <span class="checkmark"></span>
+                        Неактивные
+                    </label>
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="filterOutOfStock" name="status" value="out_of_stock">
+                        <span class="checkmark"></span>
+                        Нет в наличии
+                    </label>
+                </div>
+            </div>
+
+            <!-- Price Range -->
+            <div class="filter-group">
+                <h4>Цена</h4>
+                <div class="price-inputs">
+                    <input type="number" id="minPrice" placeholder="Мин" class="price-input">
+                    <span>-</span>
+                    <input type="number" id="maxPrice" placeholder="Макс" class="price-input">
+                </div>
+            </div>
+
+            <!-- Availability -->
+            <div class="filter-group">
+                <label class="filter-checkbox">
+                    <input type="checkbox" id="inStockOnly">
+                    <span class="checkmark"></span>
+                    Только в наличии
+                </label>
+            </div>
+
+            <button class="apply-filters-btn" id="applyFilters">
+                <i class="fas fa-filter"></i>
+                Применить фильтры
+            </button>
+        </aside>
+
+        <!-- Products Table -->
+        <section class="products-section">
+            <!-- Header with Search and Sort -->
+            <div class="products-header">
+                <div class="products-count">
+                    <span id="productsCount">Загрузка...</span> товаров
+                </div>
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchProducts" placeholder="Поиск по названию, артикулу..." onkeyup="adminProducts.searchProducts(event)">
+                </div>
                 
-                <select id="statusFilter" onchange="adminProducts.applyFilters()">
-                    <option value="">Все статусы</option>
-                    <option value="active">Активные</option>
-                    <option value="inactive">Неактивные</option>
-                    <option value="out_of_stock">Нет в наличии</option>
-                </select>
+                <div class="sort-options">
+                    <select id="sortBy" class="sort-select">
+                        <option value="created_at">По дате</option>
+                        <option value="name">По названию</option>
+                        <option value="price">По цене</option>
+                        <option value="stock">По остатку</option>
+                    </select>
+                    
+                    <select id="sortOrder" class="sort-select">
+                        <option value="desc">По убыванию</option>
+                        <option value="asc">По возрастанию</option>
+                    </select>
+
+                    <button class="view-toggle" id="viewToggle">
+                        <i class="fas fa-th-list" id="viewIcon"></i>
+                    </button>
+                </div>
             </div>
-        </div>
+            <!-- Products Grid -->
+            <div class="products-grid" id="productsGrid">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                        <p>Загрузка товаров...</p>
+                </div>
+            </div>
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <!-- Pagination will be generated by JavaScript -->
+            </div>
 
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Изображение</th>
-                    <th>Название</th>
-                    <th>Категория</th>
-                    <th>Цена</th>
-                    <th>Статус</th>
-                    <th>Остаток</th>
-                    <th>Дата</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="productsTableBody">
-                <tr>
-                    <td colspan="9" class="loading-row">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        Загрузка товаров...
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+            <!-- Table -->
+<!--            <div class="admin-table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Изображение</th>
+                            <th>Название</th>
+                            <th>Категория</th>
+                            <th>Цена</th>
+                            <th>Статус</th>
+                            <th>Остаток</th>
+                            <th>Дата</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTableBody">
+                        <tr>
+                            <td colspan="9" class="loading-row">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                Загрузка товаров...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div> -->
 
-        <!-- Pagination -->
-        <div class="pagination" id="pagination">
-            <!-- Will be filled by JavaScript -->
-        </div>
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <!-- Will be filled by JavaScript -->
+            </div>
+        </section>
     </div>
 </div>
+
+<!-- Mobile Filters Toggle -->
+<button class="mobile-filters-toggle" id="mobileFiltersToggle">
+    <i class="fas fa-filter"></i>
+    Фильтры
+</button>
 
 <!-- Create/Edit Product Modal -->
 <div class="modal large-modal" id="productFormModal">
@@ -246,6 +359,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>Подтверждение удаления</h2>
+            <span class="close-modal" onclick="adminProducts.closeDeleteModal()">&times;</span>
         </div>
         <div class="modal-body">
             <p>Вы уверены, что хотите удалить этот товар? Это действие нельзя отменить.</p>
@@ -258,6 +372,16 @@
                 <i class="fas fa-trash"></i>
                 Удалить
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Product Detail Modal (reuse from products.html) -->
+<div class="modal" id="productModal">
+    <div class="modal-content">
+        <span class="close-modal" id="closeModal">&times;</span>
+        <div class="modal-body" id="modalBody">
+            <!-- Product details will be loaded here -->
         </div>
     </div>
 </div>

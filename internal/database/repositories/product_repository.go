@@ -7,7 +7,6 @@ import (
 
 	"gorm.io/gorm"
 )
-
 type ProductRepository struct {
 	DB *gorm.DB
 }
@@ -89,7 +88,6 @@ func (r *ProductRepository) FindAll(filter ProductFilter, page, limit int, sortB
 
 func (r *ProductRepository) FindBySlug(slug string) (*models.Product, error) {
 	var product models.Product
-
 	err := r.DB.
 		Preload("Category").
 		Preload("Sizes").
@@ -106,29 +104,56 @@ func (r *ProductRepository) FindBySlug(slug string) (*models.Product, error) {
 
 	return &product, nil
 }
+func (r *ProductRepository) FindByID(id uint) (*models.Product, error) {
+	var product models.Product
+	err := r.DB.
+		Where("ID = ?", id).
+		First(&product).Error
 
-func (r *ProductRepository) Create(product *models.Product) error {
-	return r.DB.Create(product).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &product, nil
 }
-
 func (r *ProductRepository) Update(product *models.Product) error {
-	return r.DB.Save(product).Error
+    if err := r.DB.Save(product).Error; err != nil {
+        return fmt.Errorf("failed to save product: %w", err)
+    }
+    return nil
 }
-
 func (r *ProductRepository) Delete(id uint) error {
 	return r.DB.Delete(&models.Product{}, id).Error
 }
 
+
+
+func (r *ProductRepository) Create(product *models.Product) error {
+    if err := r.DB.Create(product).Error; err != nil {
+        return fmt.Errorf("failed to create product: %w", err)
+    }
+    return nil
+}
+
 // internal/database/repositories/product_repository.go (дополнение)
-func (r *ProductRepository) FindByCategory(categoryID uint) ([]models.Product, error) {
+func (r *ProductRepository) FindByCategory(category *models.Category) ([]models.Product, error) {
 	var products []models.Product
+	categoryID := category.ID
 	err := r.DB.Preload("Category").Preload("Sizes").Preload("Colors").
 		Where("category_id = ? AND is_active = ?", categoryID, true).
 		Order("created_at DESC").
 		Find(&products).Error
 	return products, err
 }
-
+// internal/database/repositories/product_repository.go (дополнение)
+//func (r *ProductRepository) FindByCategory(categoryID uint) ([]models.Product, error) {
+//	var products []models.Product
+//	err := r.DB.Preload("Category").Preload("Sizes").Preload("Colors").
+//		Where("category_id = ? AND is_active = ?", categoryID, true).
+//		Order("created_at DESC").
+//		Find(&products).Error
+//	return products, err
+//}
 func (r *ProductRepository) FindFeatured(limit int) ([]models.Product, error) {
 	var products []models.Product
 	err := r.DB.Preload("Category").Preload("Sizes").Preload("Colors").

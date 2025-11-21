@@ -4,23 +4,29 @@ import (
 	"log"
 	"os"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-
 	"otobo/internal/database"
 	"otobo/internal/database/repositories"
 	"otobo/internal/handlers"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	app := fiber.New()
-
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379", //localhost
+		Password: "",
+		DB:       0,
+	})
 	// Middleware
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000,http://localhost:3001",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Last-Sync",
+		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))
 
 	// Инициализация базы данных
@@ -44,7 +50,11 @@ func main() {
 	// ПРАВИЛЬНАЯ инициализация handlers с dependency injection
 	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
 	productHandler := handlers.NewProductHandler(productRepo, categoryRepo)
-	authHandler := handlers.NewAuthHandler(userRepo, "your-jwt-secret-key")
+	authHandler := handlers.NewAuthHandler(
+		userRepo,
+		rdb,
+		os.Getenv("JWT_SECRET"),
+	)
 	cartHandler := handlers.NewCartHandler(cartRepo, productRepo)
 	orderHandler := handlers.NewOrderHandler(orderRepo, cartRepo)
 
@@ -52,7 +62,7 @@ func main() {
 	api := app.Group("/api/v1")
 
 	// Аутентификация
-	auth := api.Group("/auth")
+	auth := api.Group("/auth", authHandler.AuthMiddleware)
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 
@@ -79,6 +89,10 @@ func main() {
 
 	// Профиль (требует аутентификации)
 	user := api.Group("/user", handlers.AuthMiddleware)
+	user.Get("/profile", authHandler.GetProfile)
+	user.Get("/sync", authHandler.Sync)
+	user.Post("/session", authHandler.CreateSession)
+	user.Post("/logout", authHandler.Logout)
 	user.Get("/profile", authHandler.GetProfile)
 
 	port := os.Getenv("PORT")

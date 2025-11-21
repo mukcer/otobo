@@ -3,16 +3,17 @@ package models
 import (
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 // Пользователь
 type User struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`
-	Email     string         `json:"email" gorm:"uniqueIndex"`
-	Password  string         `json:"-"`
-	FirstName string         `json:"first_name"`
-	LastName  string         `json:"last_name"`
+	Email     string         `json:"email" gorm:"uniqueIndex;not null"`
+	Password  string         `json:"-" gorm:"not null"`
+	FirstName string         `json:"first_name" gorm:"not null"`
+	LastName  string         `json:"last_name" gorm:"not null"`
 	Phone     string         `json:"phone"`
 	Address   string         `json:"address"`
 	Role      string         `json:"role" gorm:"default:customer"` // customer, admin
@@ -23,6 +24,76 @@ type User struct {
 	// Связи
 	Orders  []Order  `json:"orders,omitempty" gorm:"foreignKey:UserID"`
 	Reviews []Review `json:"reviews,omitempty" gorm:"foreignKey:UserID"`
+}
+
+// 🔐 Хеширование пароля перед сохранением
+func (u *User) BeforeSave(tx *gorm.DB) error {
+	if u.Password != "" && !u.isPasswordHashed() {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		u.Password = string(hashedPassword)
+	}
+	return nil
+}
+
+// 🔍 Проверка хеширован ли пароль
+func (u *User) isPasswordHashed() bool {
+	// bcrypt hash всегда начинается с $2a$, $2b$, $2x$ или $2y$
+	return len(u.Password) == 60 &&
+		(u.Password[:4] == "$2a$" || u.Password[:4] == "$2b$" ||
+			u.Password[:4] == "$2x$" || u.Password[:4] == "$2y$")
+}
+
+// ✅ Проверка пароля
+func (u *User) CheckPassword(password string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
+	return err == nil
+}
+
+// 🎯 DTO для регистрации
+type RegisterRequest struct {
+	FirstName string `json:"first_name" binding:"required"`
+	LastName  string `json:"last_name" binding:"required"`
+	Email     string `json:"email" binding:"required,email"`
+	Phone     string `json:"phone"`
+	Address   string `json:"address"`
+	Password  string `json:"password" binding:"required,min=6"`
+}
+
+// 🎯 DTO для логина
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// 🎯 DTO для ответа (без пароля)
+type UserResponse struct {
+	ID        uint      `json:"id"`
+	Email     string    `json:"email"`
+	FirstName string    `json:"first_name"`
+	LastName  string    `json:"last_name"`
+	Phone     string    `json:"phone"`
+	Address   string    `json:"address"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// 🔄 Преобразование User в UserResponse
+func (u *User) ToResponse() UserResponse {
+	return UserResponse{
+		ID:        u.ID,
+		Email:     u.Email,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+		Phone:     u.Phone,
+		Address:   u.Address,
+		Role:      u.Role,
+		CreatedAt: u.CreatedAt,
+		UpdatedAt: u.UpdatedAt,
+	}
 }
 
 // Категория товара

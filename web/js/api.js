@@ -1,59 +1,139 @@
-class API {
+ // api.js
+class Api {
     constructor() {
-        this.baseURL = 'http://localhost:3000/api/v1';
-        this.token = localStorage.getItem('auth_token');
+        this.baseURL = 'http://localhost:3000/api/v1'; //window.location.origin; // или ваш API URL
+        this.token = null;
+        this.user = null;
     }
 
+    // 🔐 Установка токена
+    setToken(token) {
+        this.token = token;
+        // Также сохраняем в localStorage для persistence
+        if (token) {
+            localStorage.setItem('auth_token', token);
+        }
+    }
+
+    // 👤 Установка пользователя
+    setUser(user) {
+        this.user = user;
+    }
+
+    // 🗑️ Удаление токена
+    removeToken() {
+        this.token = null;
+        localStorage.removeItem('auth_token');
+    }
+
+      // ✅ Проверка аутентификации
+    isAuthenticated() {
+        return !!(this.token || localStorage.getItem('auth_token'));
+    }
+
+    // 👤 Получение пользователя
+    getUser() {
+        return this.user;
+    }
+
+    // 🗑️ Удаление пользователя
+    removeUser() {
+        this.user = null;
+    }
+
+    // 🌐 Базовый метод для HTTP запросов
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
         
         const config = {
             headers: {
                 'Content-Type': 'application/json',
-                ...options.headers
+                ...options.headers,
             },
-            ...options
+            ...options,
         };
 
-        if (this.token) {
-            config.headers.Authorization = `Bearer ${this.token}`;
+        // Добавляем токен авторизации если есть
+        const token = this.token || localStorage.getItem('auth_token');
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
         }
 
         try {
             const response = await fetch(url, config);
-            const data = await response.json();
-
+            
             if (!response.ok) {
-                throw new Error(data.error || 'Request failed');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
 
-            return data;
+            return await response.json();
+            
         } catch (error) {
-            if (error.message === 'Failed to fetch') {
-                throw new Error('Network error. Please check your connection.');
-            }
+            console.error('API request failed:', error);
             throw error;
         }
     }
 
-    // Auth methods
+    // 🔐 Логин
     async login(credentials) {
-        return this.request('/auth/login', {
+        return await this.request('/auth/login', {
             method: 'POST',
-            body: JSON.stringify(credentials)
+            body: JSON.stringify(credentials),
         });
     }
 
+    // 📝 Регистрация
     async register(userData) {
-        return this.request('/auth/register', {
+        return await this.request('/auth/register', {
             method: 'POST',
-            body: JSON.stringify(userData)
+            body: JSON.stringify(userData),
         });
     }
 
-    async getProfile() {
-        return this.request('/user/profile');
+    // 🔄 Синхронизация
+    async get(endpoint, options = {}) {
+        return await this.request(endpoint, {
+            method: 'GET',
+            ...options,
+        });
     }
+
+    // 📤 POST запрос
+    async post(endpoint, data) {
+        return await this.request(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    // 🗑️ DELETE запрос
+    async delete(endpoint) {
+        return await this.request(endpoint, {
+            method: 'DELETE',
+        });
+    }
+
+    // 👤 Получение профиля
+    async getProfile() {
+        return await this.get('/user/profile');
+    }
+
+    // 🔄 Синхронизация данных
+    async sync(lastSync = null) {
+        const headers = {};
+        if (lastSync) {
+            headers['X-Last-Sync'] = lastSync;
+        }
+        
+        return await this.get('/auth/sync', { headers });
+    }
+
+    // 🚪 Выход
+    async logout() {
+        return await this.post('/auth/logout');
+    }
+
 
     // Products methods
     async getProducts(params = {}) {
@@ -115,30 +195,6 @@ class API {
         return this.request('/orders');
     }
 
-    setToken(token) {
-        this.token = token;
-        localStorage.setItem('auth_token', token);
-    }
-
-    removeToken() {
-        this.token = null;
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user');
-    }
-
-    isAuthenticated() {
-        return !!this.token;
-    }
-
-    getUser() {
-        const user = localStorage.getItem('user');
-        return user ? JSON.parse(user) : null;
-    }
-
-    setUser(user) {
-        localStorage.setItem('user', JSON.stringify(user));
-    }
 }
-
-// Global API instance
-const api = new API();
+// Создаем глобальный экземпляр API
+const api = new Api();

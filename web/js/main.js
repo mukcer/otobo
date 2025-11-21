@@ -168,10 +168,6 @@ const styleSheet = document.createElement('style');
 styleSheet.textContent = notificationStyles;
 document.head.appendChild(styleSheet);
 
-// Global app instance
-const app = new App();
-
-// Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
 });

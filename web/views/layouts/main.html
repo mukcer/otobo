@@ -36,7 +36,7 @@
                     Магазин
                 </a>
                 
-                {{if .User}}
+ <!--              {{if .User}}--> 
                 <a href="/cart" class="nav-link cart-link {{if eq .Page "cart"}}active{{end}}">
                     <i class="fas fa-shopping-cart"></i>
                     Корзина
@@ -53,7 +53,7 @@
                         Выйти
                     </button>
                 </div>
-                {{else}}
+ <!--                  {{else}} -->
                 <div class="auth-links">
                     <a href="/login" class="nav-link {{if eq .Page "login"}}active{{end}}">
                         <i class="fas fa-sign-in-alt"></i>
@@ -63,7 +63,7 @@
                         Регистрация
                     </a>
                 </div>
-                {{end}}
+                <!-- {{end}} -->
             </div>
         </div>
     </nav>

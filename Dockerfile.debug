@@ -16,7 +16,7 @@ RUN go mod download
 # Копируем весь код
 COPY . .
 
-# Устанавливаем Delve
+# Устанавливаем Delve версии, совместимой с Go 1.25.4
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Собираем бинарник с отладочной информацией

@@ -11,16 +11,19 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/redis/go-redis/v9"
+	"github.com/gofiber/storage/valkey"
 )
 
 func main() {
 	app := fiber.New()
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", //localhost
-		Password: "",
-		DB:       0,
+	store := valkey.New(valkey.Config{
+		Username:  "",
+		Password:  "",
+		Reset:     false,
+		TLSConfig: nil,
+		SelectDB:  0,
 	})
+
 	// Middleware
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -46,13 +49,15 @@ func main() {
 	userRepo := repositories.NewUserRepository(db.DB)
 	cartRepo := repositories.NewCartRepository(db.DB)
 	orderRepo := repositories.NewOrderRepository(db.DB)
+	colorRepo := repositories.NewColorRepository(db.DB)
 
 	// ПРАВИЛЬНАЯ инициализация handlers с dependency injection
 	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
+	colorHandler := handlers.NewColorHandler(colorRepo)
 	productHandler := handlers.NewProductHandler(productRepo, categoryRepo)
 	authHandler := handlers.NewAuthHandler(
 		userRepo,
-		rdb,
+		store,
 		os.Getenv("JWT_SECRET"),
 	)
 	cartHandler := handlers.NewCartHandler(cartRepo, productRepo)
@@ -62,7 +67,7 @@ func main() {
 	api := app.Group("/api/v1")
 
 	// Аутентификация
-	auth := api.Group("/auth", authHandler.AuthMiddleware)
+	auth := api.Group("/auth")
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 
@@ -72,6 +77,16 @@ func main() {
 	products.Get("/", productHandler.GetProducts)
 	products.Get("/id/:id", productHandler.GetProductByID)
 	products.Get("/:slug", productHandler.GetProduct)
+
+	colors := api.Group("/colors")
+
+	colors.Get("/", colorHandler.GetColors)
+	colors.Get("/active", colorHandler.GetActiveColors)
+	colors.Get("/:id", colorHandler.GetColorByID)
+	colors.Post("/", colorHandler.CreateColor)
+	colors.Put("/:id", colorHandler.UpdateColor)
+	colors.Delete("/:id", colorHandler.DeleteColor)
+	colors.Post("/by-ids", colorHandler.GetColorsByIDs)
 
 	// Корзина (работает для авторизованных и неавторизованных пользователей)
 	cart := api.Group("/cart")

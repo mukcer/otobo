@@ -5,7 +5,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"   # Порт вашего приложения Fiber
-      - "40000:40000" # Порт для отладчика Delve
     environment:
       - APP_ENV=development
       - DB_HOST=postgres
@@ -13,34 +12,54 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=otobo_db
-      - REDIS_URL=redis:6379
       - JWT_SECRET=your-secret-key
+      - VALKEY_URL=valkey:6379  
     volumes:
       - ./cmd/app:/app/cmd/app
     depends_on:
       - postgres
-      - redis
+      - valkey
     restart: unless-stopped
     container_name: otobo_app
     security_opt: # Необходимо для работы Delve внутри контейнера
       - "seccomp:unconfined"
-     # Фронтенд сервер
+  # Фронтенд сервер
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: Dockerfile.frontdebug
     ports:
       - "3001:3001"
     environment:
       - API_URL=http://app:3000
-      - REDIS_URL=redis:6379
+      - REDIS_URL=valkey:6379
     volumes:
       - ./web:/app/web
     depends_on:
       - app
-      - redis
+      - valkey
     restart: unless-stopped
-    container_name: otobo_frontend  
+    container_name: otobo_frontend
+
+  # Админ сервер
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    ports:
+      - "3002:3002"
+      - "40000:40000" # Порт для отладчика Delve
+    environment:
+      - API_URL=http://app:3000
+      - ADMIN_PORT=3002
+      # - REDIS_URL=valkey:6379
+    volumes:
+      - ./web:/app/web
+    depends_on:
+      - app
+      - valkey
+    restart: unless-stopped
+    container_name: otobo_admin
   postgres:
     image: postgres:15
     environment:
@@ -53,13 +72,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-  redis:
-    image: "redis:alpine"
-    container_name: "otobo_redis"
+  valkey:
+    image: "valkey/valkey:latest"
+    container_name: "otobo_valkey"
+    hostname: valkey
+    build: .
+    command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5  
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ./conf/valkey.conf:/usr/local/etc/valkey/valkey.conf
+      - ./data:/data
+
 volumes:
   postgres_data:
-  redis_data:

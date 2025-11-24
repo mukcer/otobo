@@ -58,7 +58,7 @@ class AuthManager {
                 return;
             }
 
-            const response = await api.get('/api/auth/sync', {
+            const response = await api.get('/user/sync', {
                 headers: {
                     'X-Last-Sync': lastSync || '0'
                 }
@@ -235,7 +235,7 @@ class AuthManager {
     // 🔐 Создание сессии на сервере (Redis)
     async createServerSession(user) {
         try {
-            await api.post('/api/auth/session', {
+            await api.post('/user/session', {
                 user_id: user.id,
                 login_time: new Date().toISOString(),
                 user_agent: navigator.userAgent,
@@ -258,7 +258,7 @@ class AuthManager {
 
         try {
             // Отправляем запрос на сервер для очистки Redis сессии
-            await api.post('/api/auth/logout');
+            await api.post('/user/logout');
         } catch (error) {
             console.warn('Server logout failed:', error);
         } finally {

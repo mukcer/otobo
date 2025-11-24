@@ -13,19 +13,18 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/proxy"
 	"github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/gofiber/storage/redis"
+	"github.com/gofiber/storage/valkey"
 	"github.com/gofiber/template/html/v2"
 )
 
 var sess *session.Store
 
-func initRedis() *session.Store {
-	// Создаем Redis storage для Fiber
-	rdb := redis.New(redis.Config{
-		Host:     "redis", //localhost
-		Port:     6379,
-		Password: "",
-		Database: 0,
+func initValkey() *session.Store {
+	// Создаем Valkey storage для Fiber
+	rdb := valkey.New(valkey.Config{
+		InitAddress: []string{"valkey:6379"},
+		Password:    "",
+		SelectDB:    0,
 	})
 
 	// Session store с Redis storage
@@ -42,8 +41,8 @@ func authMiddleware(c *fiber.Ctx) error {
 		return c.Next()
 	}
 
-	token := ses.Get("token")
-	user := ses.Get("user") // ← interface{} (например, map[string]interface{})
+	token := ses.Get("auth_token")
+	user := ses.Get("user_data") // ← interface{} (например, map[string]interface{})
 
 	if token != nil {
 		c.Locals("token", token)
@@ -92,7 +91,7 @@ func main() {
 
 	app := getEngineTemplate(webDir, "layouts/main")
 	// Middleware
-	sess = initRedis()
+	sess = initValkey()
 
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -253,7 +252,7 @@ func setupPageRoutes(app *fiber.App, mTitle string) {
 	}
 
 	for path, config := range pages {
-		if path == "/products" {
+		if path == "/products" || path == "/admin/products" {
 			app.Get(path, createProductsHandler(config))
 		} else {
 			app.Get(path, createDefaultHandler(config, mTitle))

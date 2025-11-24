@@ -58,21 +58,28 @@ class Api {
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
-
-        try {
-            const response = await fetch(url, config);
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-            }
-
-            return await response.json();
-            
-        } catch (error) {
-            console.error('API request failed:', error);
-            throw error;
+        if (options.body) {
+            config.body = JSON.stringify(options.body);
         }
+       try {
+        const response = await fetch(url, config);
+        
+        if (!response.ok) {
+            let errorData;
+            try {
+                errorData = await response.json();
+            } catch {
+                errorData = { error: `HTTP error! status: ${response.status}` };
+            }
+            throw new Error(errorData.error || errorData.message || `Request failed with status ${response.status}`);
+        }
+
+        return await response.json();
+        
+    } catch (error) {
+        console.error('API request failed:', error);
+        throw error;
+    }
     }
 
     // 🔐 Логин
@@ -151,6 +158,9 @@ class Api {
     async getCategories() {
         return this.request('/products/categories');
     }
+    async getColors() {
+        return this.request('/colors');
+    }        
 
     // Cart methods
     async getCart() {

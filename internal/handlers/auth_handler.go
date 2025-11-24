@@ -2,14 +2,15 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v4"
-	"github.com/redis/go-redis/v9"
+	"github.com/gofiber/storage/valkey"
+	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
 
 	"otobo/internal/database/repositories"
@@ -18,18 +19,18 @@ import (
 
 type AuthHandler struct {
 	userRepo    *repositories.UserRepository
-	redisClient *redis.Client
+	valkeyStore *valkey.Storage
 	jwtSecret   string
 }
 
 func NewAuthHandler(
 	userRepo *repositories.UserRepository,
-	redisClient *redis.Client,
+	valkeyStore *valkey.Storage,
 	jwtSecret string,
 ) *AuthHandler {
 	return &AuthHandler{
 		userRepo:    userRepo,
-		redisClient: redisClient,
+		valkeyStore: valkeyStore,
 		jwtSecret:   jwtSecret,
 	}
 }
@@ -92,20 +93,20 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// Создание сессии в Redis
+	// Создание сессии в Valkey
 	sessionData := SessionData{
 		UserID:    strconv.FormatUint(uint64(user.ID), 10),
 		LoginTime: time.Now().Format(time.RFC3339),
 		UserAgent: c.Get("User-Agent"),
-		ClientData: map[string]interface{}{
+		ClientData: map[string]any{
 			"last_sync":      req.ClientTimestamp,
 			"has_local_data": req.HasLocalData,
+			"timezone":       "Europe/Moscow",
 		},
 	}
 
-	if err := h.saveSessionToRedis(c, strconv.FormatUint(uint64(user.ID), 10), sessionData); err != nil {
-		// Логируем ошибку, но не прерываем процесс
-		fmt.Printf("Failed to save session to Redis: %v\n", err)
+	if err := h.saveSessionValkey(strconv.FormatUint(uint64(user.ID), 10), sessionData); err != nil {
+		fmt.Printf("Failed to save session to Valkey: %v\n", err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -152,7 +153,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		Email:     strings.ToLower(strings.TrimSpace(req.Email)),
 		Phone:     strings.TrimSpace(req.Phone),
 		Address:   strings.TrimSpace(req.Address),
-		Password:  req.Password, // Пароль автоматически хешируется в BeforeSave
+		Password:  req.Password,
 	}
 
 	// Сохранение через репозиторий
@@ -177,7 +178,6 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 func (h *AuthHandler) Sync(c *fiber.Ctx) error {
 	userIDStr := c.Locals("userID").(string)
 
-	// Конвертация userID из string в uint
 	userID, err := strconv.ParseUint(userIDStr, 10, 32)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -185,7 +185,6 @@ func (h *AuthHandler) Sync(c *fiber.Ctx) error {
 		})
 	}
 
-	// Получение пользователя через репозиторий
 	user, err := h.userRepo.FindByID(uint(userID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -198,18 +197,46 @@ func (h *AuthHandler) Sync(c *fiber.Ctx) error {
 		})
 	}
 
-	// Обновление сессии в Redis
+	// Обновление сессии в Valkey
 	sessionKey := "session:" + userIDStr
-	if err := h.redisClient.HSet(c.Context(), sessionKey,
-		"last_sync", time.Now().Format(time.RFC3339),
-		"last_active", time.Now().Format(time.RFC3339),
-	).Err(); err != nil {
+	now := time.Now().Format(time.RFC3339)
+
+	// Получаем текущие данные сессии
+	var sessionData SessionData
+	storedData, err := h.valkeyStore.Get(sessionKey)
+	if err == nil && storedData != nil {
+		if err := json.Unmarshal(storedData, &sessionData); err != nil {
+			fmt.Printf("Failed to unmarshal session data: %v\n", err)
+			// Создаем новую сессию если данные повреждены
+			sessionData = SessionData{
+				UserID:     userIDStr,
+				LoginTime:  now,
+				UserAgent:  c.Get("User-Agent"),
+				ClientData: make(map[string]interface{}),
+			}
+		}
+	} else {
+		// Создаем новую сессию если не найдена
+		sessionData = SessionData{
+			UserID:     userIDStr,
+			LoginTime:  now,
+			UserAgent:  c.Get("User-Agent"),
+			ClientData: make(map[string]interface{}),
+		}
+	}
+
+	// Обновляем поля
+	sessionData.ClientData["last_sync"] = now
+	sessionData.ClientData["last_active"] = now
+
+	// Сохраняем обновленные данные
+	if err := h.saveSessionValkey(userIDStr, sessionData); err != nil {
 		fmt.Printf("Failed to update session sync time: %v\n", err)
 	}
 
 	return c.JSON(fiber.Map{
 		"user":      user.ToResponse(),
-		"synced_at": time.Now().Format(time.RFC3339),
+		"synced_at": now,
 	})
 }
 
@@ -250,7 +277,6 @@ func (h *AuthHandler) CreateSession(c *fiber.Ctx) error {
 		})
 	}
 
-	// Проверяем существование пользователя через репозиторий
 	userID, err := strconv.ParseUint(req.UserID, 10, 32)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -265,7 +291,7 @@ func (h *AuthHandler) CreateSession(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.saveSessionToRedis(c, req.UserID, req); err != nil {
+	if err := h.saveSessionValkey(req.UserID, req); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Ошибка создания сессии",
 		})
@@ -281,9 +307,8 @@ func (h *AuthHandler) CreateSession(c *fiber.Ctx) error {
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	userID := c.Locals("userID").(string)
 
-	// Удаление сессии из Redis
 	sessionKey := "session:" + userID
-	if err := h.redisClient.Del(c.Context(), sessionKey).Err(); err != nil {
+	if err := h.valkeyStore.Delete(sessionKey); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Ошибка выхода",
 		})
@@ -303,10 +328,8 @@ func (h *AuthHandler) AuthMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	// Извлечение токена из заголовка
 	tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
 
-	// Валидация JWT токена
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return []byte(h.jwtSecret), nil
 	})
@@ -324,7 +347,6 @@ func (h *AuthHandler) AuthMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	// Извлечение userID из токена
 	userID, ok := claims["user_id"].(string)
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -332,18 +354,16 @@ func (h *AuthHandler) AuthMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	// Проверка сессии в Redis
+	// Проверка сессии в Valkey через Get
 	sessionKey := "session:" + userID
-	exists, err := h.redisClient.Exists(c.Context(), sessionKey).Result()
-	if err != nil || exists == 0 {
+	storedData, err := h.valkeyStore.Get(sessionKey)
+	if err != nil || storedData == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Сессия истекла",
 		})
 	}
 
-	// Сохранение userID в контексте
 	c.Locals("userID", userID)
-
 	return c.Next()
 }
 
@@ -362,22 +382,15 @@ func (h *AuthHandler) generateJWT(user *models.User) (string, error) {
 	return token.SignedString([]byte(h.jwtSecret))
 }
 
-func (h *AuthHandler) saveSessionToRedis(c *fiber.Ctx, userID string, sessionData SessionData) error {
+func (h *AuthHandler) saveSessionValkey(userID string, sessionData SessionData) error {
 	sessionKey := "session:" + userID
-
-	data := map[string]interface{}{
-		"user_id":     sessionData.UserID,
-		"login_time":  sessionData.LoginTime,
-		"user_agent":  sessionData.UserAgent,
-		"client_data": sessionData.ClientData,
-		"created_at":  time.Now().Format(time.RFC3339),
-		"last_active": time.Now().Format(time.RFC3339),
+	sessionJSON, err := json.Marshal(sessionData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session data: %w", err)
 	}
-
-	if err := h.redisClient.HSet(c.Context(), sessionKey, data).Err(); err != nil {
-		return err
+	duration := 7 * 24 * time.Hour
+	if err := h.valkeyStore.Set(sessionKey, sessionJSON, duration); err != nil {
+		return fmt.Errorf("failed to save session to valkey: %w", err)
 	}
-
-	// Установка TTL 24 часа
-	return h.redisClient.Expire(c.Context(), sessionKey, 24*time.Hour).Err()
+	return nil
 }

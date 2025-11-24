@@ -112,47 +112,92 @@ class ProductsManager {
         }
     }
 
-    async loadColors() {
-        try {
-            // For demo purposes - in real app, you'd get this from API
-            const colors = [
-                { name: 'Черный', value: '#000000' },
-                { name: 'Белый', value: '#FFFFFF' },
-                { name: 'Красный', value: '#FF0000' },
-                { name: 'Синий', value: '#0000FF' },
-                { name: 'Зеленый', value: '#008000' },
-                { name: 'Розовый', value: '#FFC0CB' },
-                { name: 'Бежевый', value: '#F5F5DC' },
-                { name: 'Серый', value: '#808080' }
-            ];
-
-            const container = document.getElementById('colorsFilter');
-            container.innerHTML = colors.map(color => `
-                <div class="color-option" 
-                     style="background-color: ${color.value}" 
-                     title="${color.name}"
-                     data-color="${color.value}">
-                </div>
-            `).join('');
-
-            // Add color filter events
-            container.querySelectorAll('.color-option').forEach(colorOption => {
-                colorOption.addEventListener('click', (e) => {
-                    const color = e.target.dataset.color;
-                    e.target.classList.toggle('selected');
-                    
-                    if (e.target.classList.contains('selected')) {
-                        this.filters.color.push(color);
-                    } else {
-                        this.filters.color = this.filters.color.filter(c => c !== color);
-                    }
-                });
-            });
-
-        } catch (error) {
-            console.error('Failed to load colors:', error);
+async loadColors() {
+    try {
+        const data = await api.getColors();
+        const container = document.getElementById('colorsFilter');
+        container.innerHTML = '<div class="loading">Загрузка цветов...</div>';
+        
+        // В зависимости от структуры ответа API
+        const colorsArray = data.colors || colors; // если colors вложен в объект
+        
+        if (!colorsArray || colorsArray.length === 0) {
+            container.innerHTML = '<div class="no-colors">Цвета не найдены</div>';
+            return;
         }
+
+        this.renderColors(colorsArray, container);
+        this.attachColorFilterEvents(container);
+
+    } catch (error) {
+        console.error('Failed to load colors:', error);
+        this.handleColorLoadError(error);
     }
+}
+
+renderColors(colors, container) {
+    container.innerHTML = colors.map(color => `
+        <div class="color-option ${color.available ? '' : 'disabled'}" 
+             style="background-color: ${color.value}" 
+             title="${color.name}${!color.available ? ' (недоступен)' : ''}"
+             data-color="${color.value}"
+             ${!color.available ? 'disabled' : ''}>
+        </div>
+    `).join('');
+}
+
+attachColorFilterEvents(container) {
+    container.querySelectorAll('.color-option:not(.disabled)').forEach(colorOption => {
+        colorOption.addEventListener('click', (e) => {
+            const color = e.target.dataset.color;
+            e.target.classList.toggle('selected');
+            
+            if (e.target.classList.contains('selected')) {
+                this.filters.color.push(color);
+            } else {
+                this.filters.color = this.filters.color.filter(c => c !== color);
+            }
+        });
+    });
+}
+
+handleColorLoadError(error) {
+    const container = document.getElementById('colorsFilter');
+    
+    if (error.message.includes('network') || error.message.includes('Failed to fetch')) {
+        container.innerHTML = `
+            <div class="error">
+                Ошибка сети. Проверьте подключение к интернету.
+                <button onclick="this.loadColors()">Повторить</button>
+            </div>
+        `;
+    } else {
+        container.innerHTML = `
+            <div class="error">
+                Не удалось загрузить цвета
+                <button onclick="this.loadDemoColors()">Использовать демо-данные</button>
+            </div>
+        `;
+    }
+}
+
+// Дополнительный метод для демо-данных (опционально)
+loadDemoColors() {
+    const colors = [
+        { name: 'Черный', value: '#000000', available: true },
+        { name: 'Белый', value: '#FFFFFF', available: true },
+        { name: 'Красный', value: '#FF0000', available: true },
+        { name: 'Синий', value: '#0000FF', available: true },
+        { name: 'Зеленый', value: '#008000', available: true },
+        { name: 'Розовый', value: '#FFC0CB', available: true },
+        { name: 'Бежевый', value: '#F5F5DC', available: true },
+        { name: 'Серый', value: '#808080', available: true }
+    ];
+    
+    const container = document.getElementById('colorsFilter');
+    this.renderColors(colors, container);
+    this.attachColorFilterEvents(container);
+}
 
     async loadProducts() {
         const grid = document.getElementById('productsGrid');

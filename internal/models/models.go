@@ -117,9 +117,10 @@ type Size struct {
 
 // Цвета
 type Color struct {
-	ID    uint   `json:"id" gorm:"primaryKey"`
-	Name  string `json:"name"`  // Черный, Белый, Красный
-	Value string `json:"value"` // #000000, #FFFFFF
+	ID     uint   `json:"id" gorm:"primaryKey"`
+	Name   string `json:"name" gorm:"size:100;not null"` // Черный, Белый, Красный
+	Value  string `json:"value" gorm:"size:7;not null"`  // #000000, #FFFFFF
+	Active bool   `json:"active" gorm:"default:true"`
 }
 
 // Товар

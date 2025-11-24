@@ -60,7 +60,7 @@
             <!-- Category Filter -->
             <div class="filter-group">
                 <h4>Категория</h4>
-                <div class="filter-options" id="categoryFilter">
+                <div class="filter-options" id="categoriesFilter">
                     <!-- Will be loaded by JS -->
                 </div>
             </div>
@@ -195,7 +195,6 @@
     Фильтры
 </button>
 
-<!-- Create/Edit Product Modal -->
 <div class="modal large-modal" id="productFormModal">
     <div class="modal-content">
         <div class="modal-header">
@@ -242,6 +241,35 @@
                     <div class="form-group full-width">
                         <label for="productDescription">Описание</label>
                         <textarea id="productDescription" name="description" rows="4"></textarea>
+                    </div>
+                </div>
+
+                <!-- Colors -->
+                <div class="form-section">
+                    <h3>Цвета</h3>
+                    
+                    <div class="colors-management">
+                        <div class="colors-selection">
+                            <label>Доступные цвета:</label>
+                            <div class="colors-container" id="colorsContainer">
+                                <!-- Colors will be loaded here -->
+                                <div class="loading-colors">Загрузка цветов...</div>
+                            </div>
+                        </div>
+                        
+                        <div class="add-color-section">
+                            <button type="button" class="btn btn-outline" onclick="adminProducts.showAddColorForm()">
+                                <i class="fas fa-plus"></i>
+                                Добавить новый цвет
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="selected-colors" id="selectedColors">
+                        <label>Выбранные цвета:</label>
+                        <div class="selected-colors-list" id="selectedColorsList">
+                            <!-- Selected colors will appear here -->
+                        </div>
                     </div>
                 </div>
 
@@ -354,6 +382,59 @@
     </div>
 </div>
 
+<!-- Modal for adding new color -->
+<div class="modal small-modal" id="addColorModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Добавить новый цвет</h2>
+            <span class="close-modal" onclick="adminProducts.closeAddColorModal()">&times;</span>
+        </div>
+        
+        <div class="modal-body">
+            <form id="addColorForm" class="color-form">
+                <div class="form-group">
+                    <label for="colorName">Название цвета *</label>
+                    <input type="text" id="colorName" name="name" required placeholder="Например: Красный">
+                    <span class="error-message" id="colorNameError"></span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="colorValue">HEX значение *</label>
+                    <div class="color-input-group">
+                        <input type="color" id="colorPicker" onchange="adminProducts.updateColorValue()">
+                        <input type="text" id="colorValue" name="value" required placeholder="#FF0000" 
+                               pattern="^#[0-9A-Fa-f]{6}$" maxlength="7">
+                    </div>
+                    <span class="error-message" id="colorValueError"></span>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="colorActive" name="active" checked>
+                        <span class="checkmark"></span>
+                        Активный цвет
+                    </label>
+                </div>
+                
+                <div class="color-preview">
+                    <div class="preview-label">Предпросмотр:</div>
+                    <div class="color-preview-box" id="colorPreviewBox"></div>
+                    <div class="color-preview-text" id="colorPreviewText"></div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="adminProducts.closeAddColorModal()">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        Сохранить цвет
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <!-- Delete Confirmation Modal -->
 <div class="modal" id="deleteModal">
     <div class="modal-content">

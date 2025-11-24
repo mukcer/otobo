@@ -80,34 +80,34 @@ func (h *ProductHandler) GetProducts(c *fiber.Ctx) error {
 }
 
 func (h *ProductHandler) GetProductByID(c *fiber.Ctx) error {
-    productID := c.Params("id") 
-    id, _ := strconv.Atoi(productID)
-    product, err := h.productRepo.FindByID(uint(id)) // Нужен соответствующий метод в репозитории
-    if err != nil {
-        return c.Status(404).JSON(fiber.Map{
-            "error": "Product not found",
-        })
-    }
+	productID := c.Params("id")
+	id, _ := strconv.Atoi(productID)
+	product, err := h.productRepo.FindByID(uint(id)) // Нужен соответствующий метод в репозитории
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "Product not found",
+		})
+	}
 
-    return c.JSON(product)
+	return c.JSON(product)
 }
 
 func (h *ProductHandler) GetProduct(c *fiber.Ctx) error {
- 
-	productSlug := c.Params("slug") // или "id"
-    
-    product, err := h.productRepo.FindBySlug(productSlug) // Нужен соответствующий метод в репозитории
-    if err != nil {
-        return c.Status(404).JSON(fiber.Map{
-            "error": "Product not found",
-        })
-    }
 
-    return c.JSON(product)
+	productSlug := c.Params("slug") // или "id"
+
+	product, err := h.productRepo.FindBySlug(productSlug) // Нужен соответствующий метод в репозитории
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "Product not found",
+		})
+	}
+
+	return c.JSON(product)
 }
 
 func (h *CategoryHandler) GetCategory(c *fiber.Ctx) error {
-	slug := c.Params("category")  //slug
+	slug := c.Params("category") //slug
 
 	category, err := h.categoryRepo.FindBySlug(slug)
 	if err != nil {
@@ -128,9 +128,8 @@ func (h *CategoryHandler) GetCategories(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(categories)
-	
-}
 
+}
 
 func (h *ProductHandler) CreateProduct(c *fiber.Ctx) error {
 	// Логика создания товара через репозиторий

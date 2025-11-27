@@ -88,7 +88,7 @@ func mainInit(apiBaseURL string, apiRoutes []string, title string, port string) 
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
 	}))
-	handler := NewFrontendHandler(sess)
+	handler := handlers.NewFrontendHandler(sess)
 	app.Use(handler.SessionAuthMiddleware)
 	utils.SetupAPIProxy(app, apiBaseURL+"/", apiRoutes)
 	utils.SetupStaticFiles(app, webDir)

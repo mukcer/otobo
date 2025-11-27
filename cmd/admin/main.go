@@ -89,7 +89,8 @@ func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string)
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
 	}))
-	app.Use(NewFrontendHandler(sess))
+	handler := handlers.NewFrontendHandler(sess)
+	app.Use(handler.SessionAuthMiddleware)
 	setupAPIProxy(app, apiBaseURL+"/", apiRoutes)
 	setupStaticFiles(app, webDir)
 	log.Println("📁 Using web directory:", webDir)

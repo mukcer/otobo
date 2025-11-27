@@ -15,13 +15,14 @@
     <link rel="stylesheet" href="/static/css/admin.css">
     <link rel="stylesheet" href="/static/css/products.css">
     {{end}}
-    {{if eq .Page "admin"}}
-    <link rel="stylesheet" href="/static/css/admin.css">
-    {{end}}
-
     {{if or (eq .Page "login") (eq .Page "register")}}
     <link rel="stylesheet" href="/static/css/auth.css">
     {{end}}
+    {{if eq .Page "admin"}}
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+    {{end}}
+
 </head>
 <body>
     <!-- Navbar -->

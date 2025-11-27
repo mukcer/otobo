@@ -1,7 +1,7 @@
  // api.js
 class Api {
     constructor() {
-        this.baseURL = '/api/v1'; //window.location.origin; // или ваш API URL
+        this.baseURL = 'http://localhost:3000/api/v1'; //window.location.origin; // или ваш API URL
         this.token = null;
         this.user = null;
     }

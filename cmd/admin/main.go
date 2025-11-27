@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"otobo/internal/handlers"
 	"otobo/internal/utils"
 	"otobo/internal/weinkey"
 	"path/filepath"
@@ -18,9 +19,10 @@ import (
 )
 
 var sess *session.Store
+var mTitle = "ODOBO - admin"
 
 func main() {
-	mTitle := "ODOBO - admin"
+
 	apiRoutes := []string{
 		"/api/v1/auth/*",
 		"/api/v1/products/*",
@@ -37,73 +39,40 @@ func main() {
 	mainInit(apiBaseURL, apiRoutes, mTitle, port)
 }
 func setupPageRoutes(app *fiber.App, mTitle string) {
-	pages := map[string]struct {
-		title string
-		page  string
-	}{
-		"/":           {"Панель управления", "admin"},
-		"/products":   {"Управление товарами", "admin_products"},
-		"/categories": {"Управление категориями", "admin_categories"},
-		"/login":      {"Вход", "login"},
-		"/register":   {"Регистрация", "register"},
-		"/profile":    {"Профиль", "profile"},
+	pages := map[string]handlers.PageHandler{
+		"/":           {Title: "Панель управления", Page: "admin"},
+		"/products":   {Title: "Управление товарами", Page: "admin_products"},
+		"/categories": {Title: "Управление категориями", Page: "admin_categories"},
+		"/login":      {Title: "Вход", Page: "login"},
+		"/register":   {Title: "Регистрация", Page: "register"},
+		"/profile":    {Title: "Профиль", Page: "profile"},
 	}
-
 	for path, config := range pages {
+		config.Shop = mTitle
 		if path == "/products" {
 			app.Get(path, createProductsHandler(config))
 		} else {
-			app.Get(path, createDefaultHandler(config, mTitle))
+			app.Get(path, handlers.CreateDefaultHandler(config))
 		}
 	}
 }
 
-func createDefaultHandler(config struct{ title, page string }, mTitle string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		authMiddleware(c)
-		user := c.Locals("user")
-		return c.Render(config.page, fiber.Map{
-			"Title": config.title + mTitle,
-			"Page":  config.page,
-			"User":  user,
-		})
-	}
-}
-
-func createProductsHandler(config struct{ title, page string }) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		authMiddleware(c)
+func createProductsHandler(config handlers.PageHandler) fiber.Handler {
+	return fiber.Handler(func(c *fiber.Ctx) error {
 		category := c.Query("category")
 		user := c.Locals("user")
 		pageNum, _ := strconv.Atoi(c.Query("page", "1"))
 		if pageNum < 1 {
 			pageNum = 1
 		}
-		return c.Render(config.page, fiber.Map{
-			"Title":       config.title + " - ODOBO Admin",
-			"Page":        config.page,
+		return c.Render(config.Page, fiber.Map{
+			"Title":       config.Title + " - ODOBO Admin",
+			"Page":        config.Page,
 			"Category":    category,
 			"CurrentPage": pageNum,
 			"User":        user,
 		})
-	}
-}
-
-func authMiddleware(c *fiber.Ctx) error {
-	ses, err := sess.Get(c)
-	if err != nil {
-		return c.Next()
-	}
-
-	token := ses.Get("auth_token")
-	user := ses.Get("user_data") // ← interface{} (например, map[string]interface{})
-
-	if token != nil {
-		c.Locals("token", token)
-		c.Locals("user", user) // ✅ Сохраняем в Locals
-	}
-
-	return c.Next()
+	})
 }
 
 func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string) *fiber.App {
@@ -120,7 +89,7 @@ func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string)
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
 	}))
-
+	app.Use(NewFrontendHandler(sess))
 	setupAPIProxy(app, apiBaseURL+"/", apiRoutes)
 	setupStaticFiles(app, webDir)
 	log.Println("📁 Using web directory:", webDir)

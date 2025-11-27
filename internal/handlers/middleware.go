@@ -4,8 +4,12 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 )
+
+type PageHandler struct {
+	Title, Page, Shop string
+}
 
 func AuthMiddleware(c *fiber.Ctx) error {
 	authHeader := c.Get("Authorization")
@@ -43,4 +47,14 @@ func AdminMiddleware(c *fiber.Ctx) error {
 	}
 
 	return c.Next()
+}
+func CreateDefaultHandler(config PageHandler) fiber.Handler {
+	return fiber.Handler(func(c *fiber.Ctx) error {
+		user := c.Locals("user")
+		return c.Render(config.Page, fiber.Map{
+			"Title": config.Title + config.Shop,
+			"Page":  config.Page,
+			"User":  user,
+		})
+	})
 }

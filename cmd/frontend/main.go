@@ -2,10 +2,9 @@ package main
 
 import (
 	"log"
-	"os"
+	"otobo/internal/handlers"
 	"otobo/internal/utils"
 	"otobo/internal/weinkey"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/proxy"
 	"github.com/gofiber/fiber/v2/middleware/session"
 )
 
@@ -37,51 +35,36 @@ func main() {
 	mainInit(apiBaseURL, apiRoutes, mTitle, port)
 }
 func setupPageRoutes(app *fiber.App, mTitle string) {
-	pages := map[string]struct {
-		title string
-		page  string
-	}{
-		"/":         {"Магазин модной женской одежды", "index"},
-		"/products": {"Каталог", "products"},
-		"/login":    {"Вход", "login"},
-		"/register": {"Регистрация", "register"},
-		"/profile":  {"Профиль", "profile"},
-		"/cart":     {"Корзина", "cart"},
+	pages := map[string]handlers.PageHandler{
+		"/":         {Title: "Магазин модной женской одежды", Page: "index"},
+		"/products": {Title: "Каталог", Page: "products"},
+		"/login":    {Title: "Вход", Page: "login"},
+		"/register": {Title: "Регистрация", Page: "register"},
+		"/profile":  {Title: "Профиль", Page: "profile"},
+		"/cart":     {Title: "Корзина", Page: "cart"},
 	}
 
 	for path, config := range pages {
+		config.Shop = mTitle
 		if path == "/products" || path == "/admin/products" {
 			app.Get(path, createProductsHandler(config))
 		} else {
-			app.Get(path, createDefaultHandler(config, mTitle))
+			app.Get(path, handlers.CreateDefaultHandler(config))
 		}
 	}
 }
 
-func createDefaultHandler(config struct{ title, page string }, mTitle string) fiber.Handler {
+func createProductsHandler(config handlers.PageHandler) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		authMiddleware(c)
-		user := c.Locals("user")
-		return c.Render(config.page, fiber.Map{
-			"Title": config.title + mTitle,
-			"Page":  config.page,
-			"User":  user,
-		})
-	}
-}
-
-func createProductsHandler(config struct{ title, page string }) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		authMiddleware(c)
 		category := c.Query("category")
 		user := c.Locals("user")
 		pageNum, _ := strconv.Atoi(c.Query("page", "1"))
 		if pageNum < 1 {
 			pageNum = 1
 		}
-		return c.Render(config.page, fiber.Map{
-			"Title":       config.title + " - ODOBO store",
-			"Page":        config.page,
+		return c.Render(config.Page, fiber.Map{
+			"Title":       config.Title + config.Shop,
+			"Page":        config.Page,
 			"Category":    category,
 			"CurrentPage": pageNum,
 			"User":        user,
@@ -89,28 +72,13 @@ func createProductsHandler(config struct{ title, page string }) fiber.Handler {
 	}
 }
 
-func authMiddleware(c *fiber.Ctx) error {
-	ses, err := sess.Get(c)
-	if err != nil {
-		return c.Next()
-	}
-
-	token := ses.Get("auth_token")
-	user := ses.Get("user_data") // ← interface{} (например, map[string]interface{})
-
-	if token != nil {
-		c.Locals("token", token)
-		c.Locals("user", user) // ✅ Сохраняем в Locals
-	}
-
-	return c.Next()
-}
-
-func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string) *fiber.App {
+func mainInit(apiBaseURL string, apiRoutes []string, title string, port string) *fiber.App {
 	port0 := "3000"
 	urlDomaine := "http://localhost"
 	urlStart := urlDomaine + ":" + port
 	webDir := utils.GetWebDir()
+	log.Printf("📁 Web directory: %s", webDir)
+
 	app := utils.GetEngineTemplate(webDir, "layouts/main")
 
 	app.Use(logger.New())
@@ -120,16 +88,26 @@ func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string)
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
 	}))
-
-	setupAPIProxy(app, apiBaseURL+"/", apiRoutes)
-	setupStaticFiles(app, webDir)
+	handler := NewFrontendHandler(sess)
+	app.Use(handler.SessionAuthMiddleware)
+	utils.SetupAPIProxy(app, apiBaseURL+"/", apiRoutes)
+	utils.SetupStaticFiles(app, webDir)
 	log.Println("📁 Using web directory:", webDir)
-	setupPageRoutes(app, mTitle)
+	setupPageRoutes(app, title)
 	// 4. Health check
+
+	// Запуск
+	log.Println("🚀 Admin server started on " + urlDomaine + ":" + port)
+	log.Fatal(app.Listen(":" + port))
+	startApp(app, "admin", title)
+	return app
+}
+
+func startApp(app *fiber.App, service string, title string) {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":    "healthy",
-			"service":   "admin",
+			"service":   service,
 			"timestamp": time.Now(),
 		})
 	})
@@ -138,8 +116,6 @@ func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string)
 
 	app.Use(func(c *fiber.Ctx) error {
 		path := c.Path()
-
-		// Пропускаем API, статику, .ico и т.п.
 		if strings.HasPrefix(path, "/api/") ||
 			strings.Contains(path, ".") ||
 			strings.HasPrefix(path, "/css/") ||
@@ -147,67 +123,10 @@ func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string)
 			strings.HasPrefix(path, "/images/") {
 			return c.SendStatus(404)
 		}
-
 		return c.Render("index", fiber.Map{
-			"Title": mTitle,
-			"Page":  "app",
+			"Title": title,
+			"Page":  service,
 		})
 	})
 
-	// Запуск
-	log.Println("🚀 Admin server started on " + urlDomaine + ":" + port)
-	log.Printf("📁 Web directory: %s", webDir)
-	log.Fatal(app.Listen(":" + port))
-	return app
-}
-
-// setupAPIProxy — проксируем API на бэкенд (:3000)
-func setupAPIProxy(app *fiber.App, basetURL string, apiRoutes []string) {
-
-	for _, route := range apiRoutes {
-		app.All(route, func(c *fiber.Ctx) error {
-			// Получаем путь после префикса
-			path := c.Params("*")
-			targetURL := basetURL + path
-
-			// Выполняем прокси
-			if err := proxy.Do(c, targetURL); err != nil {
-				return c.Status(500).JSON(fiber.Map{
-					"error": "API server is unreachable",
-				})
-			}
-
-			if err := proxy.DoTimeout(c, targetURL, 10*time.Second); err != nil {
-				log.Printf("❌ Proxy error: %v", err)
-				return c.Status(502).JSON(fiber.Map{
-					"error": "API server is unreachable",
-				})
-			}
-
-			// Убираем заголовок Server
-			c.Response().Header.Del(fiber.HeaderServer)
-			return nil
-		})
-	}
-}
-func setupStaticFiles(app *fiber.App, webDir string) {
-	// Для разработки отключаем кэширование
-	cacheDuration := -1 * time.Second
-	if os.Getenv("APP_ENV") == "production" {
-		cacheDuration = 24 * time.Hour
-	}
-	app.Static("/css", filepath.Join(webDir, "css"), fiber.Static{
-		CacheDuration: cacheDuration,
-		MaxAge:        int(cacheDuration.Seconds()),
-	})
-	app.Static("/js", filepath.Join(webDir, "js"), fiber.Static{
-		CacheDuration: cacheDuration,
-		MaxAge:        int(cacheDuration.Seconds()),
-	})
-	app.Static("/images", filepath.Join(webDir, "images"), fiber.Static{
-		CacheDuration: cacheDuration,
-	})
-	app.Static("/static", webDir, fiber.Static{
-		CacheDuration: cacheDuration,
-	})
 }

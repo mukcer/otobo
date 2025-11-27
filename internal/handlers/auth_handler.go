@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -52,11 +53,22 @@ type SessionData struct {
 // 🔐 Логин
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req LoginRequest
-	if err := c.BodyParser(&req); err != nil {
+	rawBody := c.Body()
+	contentType := c.Get("Content-Type")
+	log.Printf("Received Content-Type: %s\n", contentType) //
+	err := json.Unmarshal(rawBody, &req)
+	if err != nil {
+		log.Printf("Ошибка Unmarshal JSON: %v. Сырые данные: %s\n", err, string(rawBody))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Неверный формат данных",
 		})
 	}
+	// if err := c.BodyParser(&req); err != nil {
+	// 	log.Printf("Ошибка парсинга тела запроса. Сырые данные: %s\n", string(rawBody))
+	// 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+	// 		"error": "Неверный формат данных",
+	// 	})
+	// }
 
 	// Валидация
 	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
@@ -120,7 +132,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req models.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Неверный формат данных",
+			"error": "Неверный формат данных при регистрации",
 		})
 	}
 
@@ -154,6 +166,21 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		Phone:     strings.TrimSpace(req.Phone),
 		Address:   strings.TrimSpace(req.Address),
 		Password:  req.Password,
+	}
+
+	// Проверяем количество существующих пользователей
+	userCount, err := h.userRepo.Count()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Ошибка сервера",
+		})
+	}
+
+	// Если это первый пользователь, назначаем ему роль admin
+	if userCount == 0 {
+		user.Role = "admin"
+	} else {
+		user.Role = "customer"
 	}
 
 	// Сохранение через репозиторий
@@ -273,7 +300,7 @@ func (h *AuthHandler) CreateSession(c *fiber.Ctx) error {
 	var req SessionData
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Неверный формат данных",
+			"error": "Неверный формат данных при создании сессии",
 		})
 	}
 
@@ -331,6 +358,10 @@ func (h *AuthHandler) AuthMiddleware(c *fiber.Ctx) error {
 	tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Method)
+		}
+
 		return []byte(h.jwtSecret), nil
 	})
 
@@ -364,6 +395,7 @@ func (h *AuthHandler) AuthMiddleware(c *fiber.Ctx) error {
 	}
 
 	c.Locals("userID", userID)
+	c.Locals("userRole", claims["role"])
 	return c.Next()
 }
 
@@ -381,7 +413,17 @@ func (h *AuthHandler) generateJWT(user *models.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
 }
+func (h *AuthHandler) AdminMiddleware(c *fiber.Ctx) error {
+	// This assumes AuthAPIMiddleware ran before this
+	userRole, ok := c.Locals("userRole").(string)
+	if !ok || userRole != "admin" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{ // Use 403 Forbidden
+			"error": "Access denied. Admin rights required",
+		})
+	}
 
+	return c.Next()
+}
 func (h *AuthHandler) saveSessionValkey(userID string, sessionData SessionData) error {
 	sessionKey := "session:" + userID
 	sessionJSON, err := json.Marshal(sessionData)

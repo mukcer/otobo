@@ -219,3 +219,31 @@ type OrderFilter struct {
 	Page      int
 	Limit     int
 }
+
+// GetOrderByID возвращает заказ по ID
+func (r *OrderRepository) GetOrderByID(orderID uint) (*models.Order, error) {
+	var order models.Order
+	err := r.DB.Preload("User").
+		Preload("OrderItems").
+		Preload("OrderItems.Product").
+		Preload("OrderItems.ProductVariation").
+		Preload("OrderItems.ProductVariation.Size").
+		Preload("OrderItems.ProductVariation.Color").
+		First(&order, orderID).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &order, nil
+}
+
+// UpdateOrderStatus обновляет статус заказа
+func (r *OrderRepository) UpdateOrderStatus(orderID uint, status string) error {
+	return r.DB.Model(&models.Order{}).Where("id = ?", orderID).Update("status", status).Error
+}
+
+// UpdateOrderPaymentStatus обновляет статус оплаты заказа
+func (r *OrderRepository) UpdateOrderPaymentStatus(orderID uint, paymentStatus string) error {
+	return r.DB.Model(&models.Order{}).Where("id = ?", orderID).Update("payment_status", paymentStatus).Error
+}

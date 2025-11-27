@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"otobo/internal/utils"
+	"otobo/internal/weinkey"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,26 +15,78 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/proxy"
 	"github.com/gofiber/fiber/v2/middleware/session"
-	"github.com/gofiber/storage/valkey"
-	"github.com/gofiber/template/html/v2"
 )
 
 var sess *session.Store
 
-func initValkey() *session.Store {
-	// Создаем Valkey storage для Fiber
-	rdb := valkey.New(valkey.Config{
-		InitAddress: []string{"valkey:6379"},
-		Password:    "",
-		SelectDB:    0,
-	})
+func main() {
+	mTitle := "ODOBO - store"
+	apiRoutes := []string{
+		"/api/v1/auth/*",
+		"/api/v1/products/*",
+		"/api/v1/cart/*",
+		"/api/v1/orders/*",
+		"/api/v1/user/*",
+		"/api/v1/admin/*",
+		"/api/v1/colors/*",
+	}
+	port := utils.GetEnv("PORT", "3001")
+	store := weinkey.ValkeyInit()
+	sess = weinkey.SessionInit(store)
+	apiBaseURL := utils.GetEnv("API_URL", "http://localhost:3000")
+	mainInit(apiBaseURL, apiRoutes, mTitle, port)
+}
+func setupPageRoutes(app *fiber.App, mTitle string) {
+	pages := map[string]struct {
+		title string
+		page  string
+	}{
+		"/":         {"Магазин модной женской одежды", "index"},
+		"/products": {"Каталог", "products"},
+		"/login":    {"Вход", "login"},
+		"/register": {"Регистрация", "register"},
+		"/profile":  {"Профиль", "profile"},
+		"/cart":     {"Корзина", "cart"},
+	}
 
-	// Session store с Redis storage
-	return session.New(session.Config{
-		Storage:    rdb,
-		KeyLookup:  "cookie:session_id",
-		Expiration: 24 * time.Hour,
-	})
+	for path, config := range pages {
+		if path == "/products" || path == "/admin/products" {
+			app.Get(path, createProductsHandler(config))
+		} else {
+			app.Get(path, createDefaultHandler(config, mTitle))
+		}
+	}
+}
+
+func createDefaultHandler(config struct{ title, page string }, mTitle string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authMiddleware(c)
+		user := c.Locals("user")
+		return c.Render(config.page, fiber.Map{
+			"Title": config.title + mTitle,
+			"Page":  config.page,
+			"User":  user,
+		})
+	}
+}
+
+func createProductsHandler(config struct{ title, page string }) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authMiddleware(c)
+		category := c.Query("category")
+		user := c.Locals("user")
+		pageNum, _ := strconv.Atoi(c.Query("page", "1"))
+		if pageNum < 1 {
+			pageNum = 1
+		}
+		return c.Render(config.page, fiber.Map{
+			"Title":       config.title + " - ODOBO store",
+			"Page":        config.page,
+			"Category":    category,
+			"CurrentPage": pageNum,
+			"User":        user,
+		})
+	}
 }
 
 func authMiddleware(c *fiber.Ctx) error {
@@ -52,46 +106,12 @@ func authMiddleware(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-// Пример использования в handler
-// func someHandler(c *fiber.Ctx) error {
-//     // Получаем сессию используя контекст Fiber
-//     sess, err := sessions.Get(c)
-//     if err != nil {
-//         return c.Status(fiber.StatusInternalServerError).SendString("Session error")
-//     }
-//     defer sess.Save()
-
-//     // Работа с сессией
-//     sess.Set("user_id", 123)
-
-//     return c.SendString("Hello World")
-// }
-
-func getEngineTemplate(webDir string, viewsLayout string) *fiber.App {
-	// Инициализируем движок шаблонов
-	engine := html.New(filepath.Join(webDir, "views"), ".html")
-	engine.Reload(true) // Включить в dev
-	return fiber.New(fiber.Config{
-		DisableStartupMessage: false,
-		Views:                 engine,
-		ViewsLayout:           viewsLayout, // относительно views/
-	})
-}
-
-func main() {
-	// Находим папку web
-	mTitle := "ODOBO - store"
+func mainInit(apiBaseURL string, apiRoutes []string, mTitle string, port string) *fiber.App {
 	port0 := "3000"
-	port := getEnv("PORT", "3001")
 	urlDomaine := "http://localhost"
 	urlStart := urlDomaine + ":" + port
-
-	webDir := getWebDir()
-	log.Println("📁 Using web directory:", webDir)
-
-	app := getEngineTemplate(webDir, "layouts/main")
-	// Middleware
-	sess = initValkey()
+	webDir := utils.GetWebDir()
+	app := utils.GetEngineTemplate(webDir, "layouts/main")
 
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -101,26 +121,15 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// 1. Прокси API → ДО статики
-	apiRoutes := []string{
-		"/api/v1/auth/*",
-		"/api/v1/products/*",
-		"/api/v1/cart/*",
-		"/api/v1/orders/*",
-		"/api/v1/user/*",
-		"/api/v1/admin/*",
-	}
-	setupAPIProxy(app, urlStart+"/", apiRoutes)
-
-	// 2. Статические файлы
+	setupAPIProxy(app, apiBaseURL+"/", apiRoutes)
 	setupStaticFiles(app, webDir)
-	// 3. Страницы
+	log.Println("📁 Using web directory:", webDir)
 	setupPageRoutes(app, mTitle)
 	// 4. Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":    "healthy",
-			"service":   "frontend",
+			"service":   "admin",
 			"timestamp": time.Now(),
 		})
 	})
@@ -146,36 +155,10 @@ func main() {
 	})
 
 	// Запуск
-	log.Println("🚀 Frontend server started on " + urlDomaine + ":" + port)
+	log.Println("🚀 Admin server started on " + urlDomaine + ":" + port)
 	log.Printf("📁 Web directory: %s", webDir)
 	log.Fatal(app.Listen(":" + port))
-}
-
-// getWebDir — ищем папку web
-func getWebDir() string {
-	currentDir, _ := os.Getwd()
-	log.Println("🔍 Current dir:", currentDir)
-
-	// Относительные пути от cmd/frontend
-	dirsToCheck := []string{
-		filepath.Join(currentDir, "..", "..", "web"), // ../../web
-		filepath.Join(currentDir, "..", "web"),       // ../web
-		filepath.Join(currentDir, "web"),             // ./web
-		"../../web",
-		"../web",
-		"./web",
-	}
-
-	for _, dir := range dirsToCheck {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			abs, _ := filepath.Abs(dir)
-			return abs
-		}
-	}
-
-	// Если не найдено — паника
-	log.Fatal("❌ Папка 'web' не найдена. Ожидается: ../../web")
-	return ""
+	return app
 }
 
 // setupAPIProxy — проксируем API на бэкенд (:3000)
@@ -227,66 +210,4 @@ func setupStaticFiles(app *fiber.App, webDir string) {
 	app.Static("/static", webDir, fiber.Static{
 		CacheDuration: cacheDuration,
 	})
-}
-
-// getEnv — получить переменную окружения
-func getEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok {
-		return v
-	}
-	return fallback
-}
-
-func setupPageRoutes(app *fiber.App, mTitle string) {
-	pages := map[string]struct {
-		title string
-		page  string
-	}{
-		"/":               {"Магазин модной женской одежды", "index"},
-		"/products":       {"Каталог", "products"},
-		"/login":          {"Вход", "login"},
-		"/register":       {"Регистрация", "register"},
-		"/profile":        {"Профиль", "profile"},
-		"/admin/products": {"Управление товарами", "admin_products"},
-		"/cart":           {"Корзина", "cart"},
-	}
-
-	for path, config := range pages {
-		if path == "/products" || path == "/admin/products" {
-			app.Get(path, createProductsHandler(config))
-		} else {
-			app.Get(path, createDefaultHandler(config, mTitle))
-		}
-	}
-}
-
-func createDefaultHandler(config struct{ title, page string }, mTitle string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		authMiddleware(c)
-		user := c.Locals("user")
-		return c.Render(config.page, fiber.Map{
-			"Title": config.title + mTitle,
-			"Page":  config.page,
-			"User":  user,
-		})
-	}
-}
-
-func createProductsHandler(config struct{ title, page string }) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		authMiddleware(c)
-		category := c.Query("category")
-		user := c.Locals("user")
-		pageNum, _ := strconv.Atoi(c.Query("page", "1"))
-		if pageNum < 1 {
-			pageNum = 1
-		}
-		return c.Render(config.page, fiber.Map{
-			"Title":       config.title + " - ODOBO store",
-			"Page":        config.page,
-			"Category":    category,
-			"CurrentPage": pageNum,
-			"User":        user,
-		})
-	}
 }

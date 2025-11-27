@@ -1,7 +1,7 @@
  // api.js
 class Api {
     constructor() {
-        this.baseURL = 'http://localhost:3000/api/v1'; //window.location.origin; // или ваш API URL
+        this.baseURL = '/api/v1'; //window.location.origin; // или ваш API URL
         this.token = null;
         this.user = null;
     }
@@ -86,7 +86,7 @@ class Api {
     async login(credentials) {
         return await this.request('/auth/login', {
             method: 'POST',
-            body: JSON.stringify(credentials),
+            body: credentials,
         });
     }
 
@@ -94,7 +94,7 @@ class Api {
     async register(userData) {
         return await this.request('/auth/register', {
             method: 'POST',
-            body: JSON.stringify(userData),
+            body: userData,
         });
     }
 
@@ -110,7 +110,7 @@ class Api {
     async post(endpoint, data) {
         return await this.request(endpoint, {
             method: 'POST',
-            body: JSON.stringify(data),
+            body: data,
         });
     }
 
@@ -197,7 +197,7 @@ class Api {
     async createOrder(data) {
         return this.request('/orders', {
             method: 'POST',
-            body: JSON.stringify(data)
+            body: data
         });
     }
 

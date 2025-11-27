@@ -1,3 +1,4 @@
+// Admin Products object
 class AdminProducts {
     constructor() {
         this.currentPage = 1;
@@ -38,7 +39,8 @@ class AdminProducts {
             document.getElementById('searchProducts').value = this.currentFilters.search;
         }
     }
-// Load available colors
+    
+    // Load available colors
     async loadColors() {
         try {
             const container = document.getElementById('colorsContainer');
@@ -60,7 +62,8 @@ class AdminProducts {
             container.innerHTML = '<div class="error">Не удалось загрузить цвета</div>';
         }
     }
-     // Render available colors
+    
+    // Render available colors
     renderColors(colors) {
         const container = document.getElementById('colorsContainer');
         
@@ -83,6 +86,7 @@ class AdminProducts {
             }
         });
     }
+    
     // Toggle color selection
     toggleColorSelection(element) {
         const colorId = parseInt(element.dataset.colorId);
@@ -107,6 +111,7 @@ class AdminProducts {
 
         this.renderSelectedColors();
     }
+    
     // Render selected colors list
     renderSelectedColors() {
         const container = document.getElementById('selectedColorsList');
@@ -126,6 +131,7 @@ class AdminProducts {
             </div>
         `).join('');
     }
+    
     // Remove selected color
     removeSelectedColor(colorId) {
         this.selectedColors = this.selectedColors.filter(color => color.id !== colorId);
@@ -162,7 +168,8 @@ class AdminProducts {
         valueInput.value = picker.value.toUpperCase();
         this.updateColorPreview();
     }
-// Update color preview
+    
+    // Update color preview
     updateColorPreview() {
         const colorValue = document.getElementById('colorValue').value;
         const colorName = document.getElementById('colorName').value || 'Новый цвет';
@@ -179,6 +186,7 @@ class AdminProducts {
         document.getElementById('colorNameError').textContent = '';
         document.getElementById('colorValueError').textContent = '';
     }
+    
     // Handle color form submission
     async handleAddColorForm(event) {
         event.preventDefault();
@@ -189,7 +197,7 @@ class AdminProducts {
             active: document.getElementById('colorActive').checked
         };
     
-    // Validation
+        // Validation
         if (!formData.name) {
             document.getElementById('colorNameError').textContent = 'Введите название цвета';
             return;
@@ -236,6 +244,7 @@ class AdminProducts {
     getSelectedColors() {
         return this.selectedColors.map(color => color.id);
     }
+    
     // Set colors when editing product
     setProductColors(colorIds) {
         this.selectedColors = [];
@@ -265,6 +274,7 @@ class AdminProducts {
             }
         });
     }
+    
     initColors() {
         this.loadColors();
         
@@ -282,6 +292,7 @@ class AdminProducts {
             this.updateColorPreview();
         });
     }
+    
     setupEventListeners() {
         // Применить фильтры
         document.getElementById('applyFilters').addEventListener('click', () => this.applyFilters());
@@ -734,6 +745,7 @@ class AdminProducts {
             this.showError('Ошибка соединения');
         }
     }
+    
     async handleFormSubmit(e) {
         e.preventDefault();
 
@@ -1031,6 +1043,7 @@ class AdminProducts {
             this.setLoading(submitBtn, false);
         }
     }
+    
     // 🔧 Вспомогательные методы для handleSubmit
     prepareFormData() {
         const formData = {
@@ -1058,6 +1071,7 @@ class AdminProducts {
 
         return formData;
     }
+    
     validateForm() {
         let isValid = true;
         this.clearErrors();
@@ -1117,9 +1131,11 @@ class AdminProducts {
         div.textContent = text;
         return div.innerHTML;
     }
+    
     formatPrice(price) {
         return new Intl.NumberFormat('ru-RU').format(price);
     }
+    
     showFieldError(fieldId, message) {
         const field = document.getElementById(fieldId);
         const errorElement = document.getElementById(`${fieldId}Error`) || this.createErrorElement(fieldId);
@@ -1151,6 +1167,7 @@ class AdminProducts {
             el.style.display = 'none';
         });
     }
+    
     setLoading(button, isLoading) {
         if (isLoading) {
             button.disabled = true;
@@ -1199,6 +1216,7 @@ class AdminProducts {
             }
         }, 5000);
     }
+    
     getNotificationIcon(type) {
         const icons = {
             'success': 'check-circle',
@@ -1233,6 +1251,7 @@ class AdminProducts {
             preview.innerHTML = '';
         }
     }
+    
     displayFormErrors(errors) {
         this.clearErrors();
 

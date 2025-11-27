@@ -46,7 +46,7 @@
       "remotePath": "/root",
       "port": 40000,
       "host": "127.0.0.1",
-      "cwd": "${workspaceFolder}/cmd/admin",
+      "cwd": "${workspaceFolder}/cmd/frontend",
       "showLog": true,
       "trace": "verbose",
       "apiVersion": 2,

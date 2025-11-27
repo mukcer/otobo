@@ -6,6 +6,7 @@
     <title>{{.Title}}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.0/dist/css/tabulator.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
     {{if eq .Page "products"}}
     <link rel="stylesheet" href="/static/css/products.css">
@@ -13,6 +14,9 @@
     {{if eq .Page "admin_products"}}
     <link rel="stylesheet" href="/static/css/admin.css">
     <link rel="stylesheet" href="/static/css/products.css">
+    {{end}}
+    {{if eq .Page "admin"}}
+    <link rel="stylesheet" href="/static/css/admin.css">
     {{end}}
 
     {{if or (eq .Page "login") (eq .Page "register")}}
@@ -82,11 +86,15 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/main.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
     
     {{if eq .Page "products"}}
     <script src="/static/js/products.js"></script>
     {{end}}
     {{if eq .Page "admin_products"}}
+    <script src="/static/js/admin.js"></script>
+    {{end}}
+    {{if eq .Page "admin"}}
     <script src="/static/js/admin.js"></script>
     {{end}}
     {{if or (eq .Page "login") (eq .Page "register")}}

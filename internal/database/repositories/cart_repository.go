@@ -297,3 +297,17 @@ func (r *CartRepository) ValidateCartItems(userID uint, sessionID string) ([]str
 
 	return warnings, nil
 }
+
+// GetByID возвращает корзину по ID
+func (r *CartRepository) GetByID(cartID uint) (*models.Cart, error) {
+	var cart models.Cart
+	if err := r.DB.Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.ProductVariation").
+		Preload("Items.ProductVariation.Size").
+		Preload("Items.ProductVariation.Color").
+		First(&cart, cartID).Error; err != nil {
+		return nil, err
+	}
+	return &cart, nil
+}

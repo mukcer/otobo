@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -29,7 +30,7 @@ type Config struct {
 
 func NewConfig() *Config {
 	return &Config{
-		Host:     getEnv("DB_HOST", "localhost"),
+		Host:     getEnv("DB_HOST", "postgres"),
 		Port:     getEnv("DB_PORT", "5432"),
 		User:     getEnv("DB_USER", "postgres"),
 		Password: getEnv("DB_PASSWORD", "postgres"),
@@ -107,4 +108,103 @@ func (db *Database) Close() error {
 // WithTransaction выполняет операции в транзакции
 func (db *Database) WithTransaction(fn func(tx *gorm.DB) error) error {
 	return db.DB.Transaction(fn)
+}
+
+// Admin functions for database management
+
+// GetTables возвращает список таблиц в базе данных
+func (db *Database) GetTables() ([]string, error) {
+	var tables []string
+	err := db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = 'public'").Scan(&tables).Error
+	return tables, err
+}
+
+// GetTableInfo возвращает информацию о таблице
+func (db *Database) GetTableInfo(tableName string) (map[string]interface{}, error) {
+	var count int64
+	err := db.Table(tableName).Count(&count).Error
+	if err != nil {
+		return nil, err
+	}
+
+	info := map[string]interface{}{
+		"name":  tableName,
+		"count": count,
+	}
+
+	return info, nil
+}
+
+// GetTableData возвращает данные из таблицы
+func (db *Database) GetTableData(tableName string, limit, offset int) ([]map[string]interface{}, error) {
+	var result []map[string]interface{}
+	query := fmt.Sprintf("SELECT * FROM %s LIMIT %d OFFSET %d", tableName, limit, offset)
+	err := db.Raw(query).Scan(&result).Error
+	return result, err
+}
+
+// GetTableColumns возвращает информацию о колонках таблицы
+func (db *Database) GetTableColumns(tableName string) ([]map[string]interface{}, error) {
+	var columns []map[string]interface{}
+	query := `
+		SELECT column_name, data_type, is_nullable, column_default
+		FROM information_schema.columns
+		WHERE table_name = ? AND table_schema = 'public'
+		ORDER BY ordinal_position
+	`
+	err := db.Raw(query, tableName).Scan(&columns).Error
+	return columns, err
+}
+
+// UpdateTableData обновляет данные в таблице
+func (db *Database) UpdateTableData(tableName string, id string, data map[string]interface{}) error {
+	// Удаляем системные поля если они есть
+	delete(data, "id")
+	delete(data, "created_at")
+	delete(data, "updated_at")
+
+	// Формируем запрос на обновление
+	query := fmt.Sprintf("UPDATE %s SET ", tableName)
+	values := make([]interface{}, 0)
+	setParts := make([]string, 0)
+
+	for key, value := range data {
+		setParts = append(setParts, key+" = ?")
+		values = append(values, value)
+	}
+
+	query += strings.Join(setParts, ", ")
+	query += " WHERE id = ?"
+	values = append(values, id)
+
+	return db.Exec(query, values...).Error
+}
+
+// DeleteTable удаляет таблицу из базы данных
+func (db *Database) DeleteTable(tableName string) error {
+	return db.Migrator().DropTable(tableName)
+}
+
+// BackupDatabase создает резервную копию базы данных
+func (db *Database) BackupDatabase() error {
+	// В реальной реализации здесь будет код для создания резервной копии
+	// Пока просто логируем действие
+	log.Println("Creating database backup")
+	return nil
+}
+
+// OptimizeDatabase оптимизирует базу данных
+func (db *Database) OptimizeDatabase() error {
+	// В реальной реализации здесь будет код для оптимизации базы данных
+	// Пока просто логируем действие
+	log.Println("Optimizing database")
+	return nil
+}
+
+// ClearQueryCache очищает кэш запросов
+func (db *Database) ClearQueryCache() error {
+	// В реальной реализации здесь будет код для очистки кэша запросов
+	// Пока просто логируем действие
+	log.Println("Clearing query cache")
+	return nil
 }

@@ -1,0 +1,296 @@
+{{define "admin"}}
+<div class="container">
+    <div class="page-header">
+        <h1>Панель управления</h1>
+        <p>Управление приложением, базой данных и кэшем</p>
+    </div>
+
+    <div class="admin-dashboard">
+        <!-- Навигация по разделам -->
+        <div class="admin-nav">
+            <div class="nav-item active" data-tab="overview">
+                <i class="fas fa-tachometer-alt"></i>
+                <span>Обзор</span>
+            </div>
+            <div class="nav-item" data-tab="settings">
+                <i class="fas fa-cog"></i>
+                <span>Настройки</span>
+            </div>
+            <div class="nav-item" data-tab="database">
+                <i class="fas fa-database"></i>
+                <span>База данных</span>
+            </div>
+            <div class="nav-item" data-tab="cache">
+                <i class="fas fa-memory"></i>
+                <span>Кэш (Valkey)</span>
+            </div>
+            <div class="nav-item" data-tab="orders">
+                <i class="fas fa-shopping-cart"></i>
+                <span>Заказы</span>
+            </div>
+        </div>
+
+        <!-- Контент вкладок -->
+        <div class="admin-content">
+            <!-- Обзор -->
+            <div class="tab-content active" id="overview-tab">
+                <div class="dashboard-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-boxes"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="totalProducts">0</div>
+                            <div class="stat-label">Товаров</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="totalUsers">0</div>
+                            <div class="stat-label">Пользователей</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="totalOrders">0</div>
+                            <div class="stat-label">Заказов</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="totalRevenue">0</div>
+                            <div class="stat-label">Выручка</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h3>Последние действия</h3>
+                    <div class="activity-list" id="activityList">
+                        <div class="activity-item">
+                            <div class="activity-icon">
+                                <i class="fas fa-plus"></i>
+                            </div>
+                            <div class="activity-content">
+                                <div class="activity-title">Система запущена</div>
+                                <div class="activity-time">Только что</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Настройки -->
+            <div class="tab-content" id="settings-tab">
+                <div class="settings-section">
+                    <h3>Основные настройки</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label>Название магазина</label>
+                            <input type="text" id="storeName" value="ODOBO Store">
+                        </div>
+                        <div class="setting-item">
+                            <label>Описание</label>
+                            <input type="text" id="storeDescription" value="Интернет-магазин модной одежды">
+                        </div>
+                        <div class="setting-item">
+                            <label>Контактный email</label>
+                            <input type="email" id="contactEmail" value="info@odobo.ru">
+                        </div>
+                        <div class="setting-item">
+                            <label>Телефон поддержки</label>
+                            <input type="text" id="supportPhone" value="+7 (495) 123-45-67">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="admin.saveSettings()">
+                        <i class="fas fa-save"></i>
+                        Сохранить настройки
+                    </button>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Настройки доставки</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label>Стоимость стандартной доставки</label>
+                            <input type="number" id="standardShipping" value="300">
+                        </div>
+                        <div class="setting-item">
+                            <label>Порог бесплатной доставки</label>
+                            <input type="number" id="freeShippingThreshold" value="5000">
+                        </div>
+                        <div class="setting-item">
+                            <label>Стоимость экспресс-доставки</label>
+                            <input type="number" id="expressShipping" value="500">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- База данных -->
+            <div class="tab-content" id="database-tab">
+                <div class="database-section">
+                    <h3>Управление таблицами</h3>
+                    <div class="table-list" id="tableList">
+                        <!-- Список таблиц будет загружен здесь -->
+                    </div>
+                </div>
+
+                <div class="database-section">
+                    <h3>Операции с базой данных</h3>
+                    <div class="db-actions">
+                        <button class="btn btn-secondary" onclick="admin.backupDatabase()">
+                            <i class="fas fa-download"></i>
+                            Создать резервную копию
+                        </button>
+                        <button class="btn btn-warning" onclick="admin.optimizeDatabase()">
+                            <i class="fas fa-compress"></i>
+                            Оптимизировать базу
+                        </button>
+                        <button class="btn btn-danger" onclick="admin.clearCache()">
+                            <i class="fas fa-trash"></i>
+                            Очистить кэш запросов
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Кэш (Valkey) -->
+            <div class="tab-content" id="cache-tab">
+                <div class="cache-section">
+                    <h3>Статистика кэша</h3>
+                    <div class="cache-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="cacheHits">0</div>
+                            <div class="stat-label">Попаданий</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="cacheMisses">0</div>
+                            <div class="stat-label">Промахов</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="cacheUsage">0%</div>
+                            <div class="stat-label">Использование</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cache-section">
+                    <h3>Управление кэшем</h3>
+                    <div class="cache-actions">
+                        <button class="btn btn-secondary" onclick="admin.clearCache()">
+                            <i class="fas fa-broom"></i>
+                            Очистить весь кэш
+                        </button>
+                        <button class="btn btn-warning" onclick="admin.clearSessions()">
+                            <i class="fas fa-user-times"></i>
+                            Очистить сессии
+                        </button>
+                    </div>
+                </div>
+
+                <div class="cache-section">
+                    <h3>Ключи кэша</h3>
+                    <div class="cache-keys" id="cacheKeys">
+                        <!-- Список ключей будет загружен здесь -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Заказы -->
+            <div class="tab-content" id="orders-tab">
+                <div class="page-header">
+                    <h2>Управление заказами</h2>
+                    <p>Просмотр и управление заказами клиентов</p>
+                </div>
+                
+                <div class="orders-filter">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label>Статус заказа</label>
+                            <select id="orderStatusFilter">
+                                <option value="">Все статусы</option>
+                                <option value="pending">В ожидании</option>
+                                <option value="paid">Оплачен</option>
+                                <option value="shipped">Отправлен</option>
+                                <option value="delivered">Доставлен</option>
+                                <option value="cancelled">Отменен</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label>Поиск по номеру заказа</label>
+                            <input type="text" id="orderNumberSearch" placeholder="Введите номер заказа">
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label>Клиент</label>
+                            <input type="text" id="customerSearch" placeholder="Имя клиента">
+                        </div>
+                        
+                        <div class="filter-actions">
+                            <button class="btn btn-primary" onclick="admin.loadOrders()">
+                                <i class="fas fa-search"></i>
+                                Найти
+                            </button>
+                            <button class="btn btn-secondary" onclick="admin.resetOrderFilters()">
+                                <i class="fas fa-times"></i>
+                                Сбросить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="orders-table-container">
+                    <div id="ordersTable"></div>
+                </div>
+                
+                <div class="pagination" id="ordersPagination">
+                    <!-- Пагинация будет добавлена здесь -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для подтверждения действий -->
+<div class="modal" id="confirmModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="confirmTitle">Подтверждение действия</h2>
+            <span class="close-modal" onclick="admin.closeConfirmModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p id="confirmMessage">Вы уверены, что хотите выполнить это действие?</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="admin.closeConfirmModal()">
+                Отмена
+            </button>
+            <button type="button" class="btn btn-danger" id="confirmActionBtn">
+                Подтвердить
+            </button>
+        </div>
+    </div>
+</div>
+
+</script>
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+    admin.init();
+});
+</script>
+{{end}}

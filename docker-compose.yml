@@ -13,33 +13,50 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=otobo_db
       - JWT_SECRET=your-secret-key
-      - VALKEY_URL=valkey:6379  
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
     volumes:
       - ./cmd/app:/app/cmd/app
     depends_on:
-      - postgres
-      - valkey
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
     restart: unless-stopped
     container_name: otobo_app
     security_opt: # Необходимо для работы Delve внутри контейнера
       - "seccomp:unconfined"
+    networks:
+      - otobo_network 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s   
+  
   # Фронтенд сервер
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontdebug
+      dockerfile: Dockerfile.frontend
     ports:
       - "3001:3001"
     environment:
       - API_URL=http://app:3000
-      - REDIS_URL=valkey:6379
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
     volumes:
       - ./web:/app/web
     depends_on:
-      - app
-      - valkey
+      valkey:
+          condition: service_healthy
+      app:
+          condition: service_healthy
     restart: unless-stopped
     container_name: otobo_frontend
+    networks:
+      - otobo_network  
 
   # Админ сервер
   admin:
@@ -50,16 +67,30 @@ services:
       - "3002:3002"
       - "40000:40000" # Порт для отладчика Delve
     environment:
+      - APP_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=otobo_db
       - API_URL=http://app:3000
       - ADMIN_PORT=3002
-      # - REDIS_URL=valkey:6379
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
     volumes:
       - ./web:/app/web
     depends_on:
-      - app
-      - valkey
+      postgres:
+        condition: service_healthy
+      valkey:
+          condition: service_healthy
+      app:
+          condition: service_healthy
     restart: unless-stopped
     container_name: otobo_admin
+    networks:
+      - otobo_network  
+
   postgres:
     image: postgres:15
     environment:
@@ -71,23 +102,41 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - otobo_network  
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d otobo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   valkey:
     image: "valkey/valkey:latest"
     container_name: "otobo_valkey"
     hostname: valkey
-    build: .
-    command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf"]
     healthcheck:
-      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
-      interval: 1s
-      timeout: 3s
-      retries: 5  
+      test: ["CMD-SHELL", "valkey-cli -h localhost ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s 
     ports:
       - "6379:6379"
     volumes:
-      - ./conf/valkey.conf:/usr/local/etc/valkey/valkey.conf
-      - ./data:/data
+      - valkey_data:/data
+    command: >
+      sh -c "
+        valkey-server --bind 0.0.0.0 --port 6379 --appendonly yes --protected-mode no
+      "  
+    networks:
+      - otobo_network
 
 volumes:
   postgres_data:
+  valkey_data:
+networks:
+  otobo_network:
+    driver: bridge
+    name: otobo_network  

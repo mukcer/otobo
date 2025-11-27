@@ -35,3 +35,9 @@ func (r *UserRepository) FindByID(id uint) (*models.User, error) {
 	}
 	return &user, nil
 }
+
+func (r *UserRepository) Count() (int64, error) {
+	var count int64
+	err := r.DB.Model(&models.User{}).Count(&count).Error
+	return count, err
+}

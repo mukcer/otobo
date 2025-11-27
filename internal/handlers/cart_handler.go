@@ -220,3 +220,24 @@ func (h *CartHandler) GetCartCount(c *fiber.Ctx) error {
 func generateSessionID() string {
 	return "session_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 }
+
+// GetCartByID возвращает корзину по ID
+func (h *CartHandler) GetCartByID(c *fiber.Ctx) error {
+	cartID, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid cart ID",
+		})
+	}
+
+	cart, err := h.cartRepo.GetByID(uint(cartID))
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "Cart not found",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"cart": cart,
+	})
+}
